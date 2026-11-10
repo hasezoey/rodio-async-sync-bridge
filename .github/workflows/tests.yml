@@ -12,7 +12,19 @@ on:
         required: false
 
 jobs:
-  lint:
+  # Check rustfmt
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly
+          components: rustfmt
+      - run: cargo +nightly fmt --all -- --check
+
+  # Check clippy.
+  clippy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,18 +32,13 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          components: rustfmt, clippy
+          components: clippy
 
       - uses: Swatinem/rust-cache@v2
         id: cache
 
       - name: Run cargo clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
-
-      - name: Run cargo fmt
-        run: cargo fmt --all --check
-        # Always run both "clippy" and "fmt", even if clippy fails, but not if any of the previous steps fail.
-        if: ${{ !cancelled() && steps.cache.conclusion == 'success' }}
 
   tests:
     runs-on: ubuntu-latest
