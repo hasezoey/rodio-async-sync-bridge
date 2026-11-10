@@ -117,6 +117,11 @@ body = """
 {% else %}\
     [Unreleased]: {{ self::remote_url(commit=commits[0]) }}/compare/{{ previous.version }}..HEAD
 {% endif %}\n
+
+DEBUG:
+```txt
+{{ dump }}
+```
 """
 # Remove leading and trailing whitespaces from the changelog's body.
 trim = true
