@@ -88,7 +88,6 @@ body = """
             {% raw %}  {% endraw %}- **BREAKING CHANGE**: {{ commit.breaking_description }}
     {% endfor -%}
 {% endif -%}
-
 {% for group, commits in commits | group_by(attribute="group") %}
     ### {{ group | striptags | trim | upper_first }}
 
@@ -113,7 +112,7 @@ body = """
     [{{ version }}]({{ self::remote_url() }}/compare/{{ previous.version }}..{{ version }})
 {% elif previous.version %}\
     [Unreleased]: {{ self::remote_url() }}/compare/{{ previous.version }}..HEAD
-{% endif %}\n
+{% endif %}
 """
 # Remove leading and trailing whitespaces from the changelog's body.
 trim = true
