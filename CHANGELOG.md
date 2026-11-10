@@ -1,8 +1,16 @@
 # Changelog
+
+## [0.1.1]
+
+Released on: 2026.11.10
+
+### Miscellaneous Tasks
+
+- fix requirements for cargo publish
+
 ## [0.1.0]
 
-Released on: 2026-11-10
-
+Released on: 2026.11.10
 
 ### Features
 
@@ -39,8 +47,3 @@ Released on: 2026-11-10
 
 - 19 commit(s) contributed to the release.
 - 0 day(s) passed between the first and last commit.
-
-
-
-
-All notable changes to this project will be documented in this file.

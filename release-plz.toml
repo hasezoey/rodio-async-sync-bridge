@@ -53,7 +53,7 @@ commit_preprocessors = [
 ]
 # A Tera template to be rendered as the changelog's header.
 # See https://keats.github.io/tera/docs/#introduction
-header = "# Changelog"
+header = "# Changelog\n"
 # A Tera template to be rendered for each release in the changelog.
 # See https://keats.github.io/tera/docs/#introduction
 body = """
@@ -75,7 +75,7 @@ body = """
 {% if version %}\
     ## [{{ version }}]
 
-    Released on: {{ timestamp | date(format="%Y-%m-%d") }}
+    Released on: {{ timestamp | date(format="%Y.%m.%d") }}
 {% else %}\
     ## [Unreleased]
 {% endif %}
