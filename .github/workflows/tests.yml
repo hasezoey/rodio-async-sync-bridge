@@ -1,0 +1,59 @@
+name: Rust Tests
+
+on:
+  push:
+  pull_request:
+  # schedule:
+  #   - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      git-ref:
+        description: Git Ref (Optional)
+        required: false
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        id: cache
+
+      - name: Run cargo clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run cargo fmt
+        run: cargo fmt --all --check
+        # Always run both "clippy" and "fmt", even if clippy fails, but not if any of the previous steps fail.
+        if: ${{ !cancelled() && steps.cache.conclusion == 'success' }}
+
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [stable, nightly, "1.87"]
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event.inputs.git-ref == ''
+      - uses: actions/checkout@v4
+        if: github.event.inputs.git-ref != ''
+        with:
+          ref: ${{ github.event.inputs.git-ref }}
+      - name: Install Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.toolchain }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Run syntax check
+        run: cargo build --workspace --all-features
+      - name: Tests
+        run: cargo test --workspace --all-features --no-fail-fast
+        env:
+          RUST_BACKTRACE: full
