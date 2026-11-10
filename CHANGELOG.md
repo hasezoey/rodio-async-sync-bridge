@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.1.3]
+
+Released on: 2026.11.10
+
+### Bug Fixes
+
+- Simplify "SeekData" docs
+
+### Miscellaneous Tasks
+
+- *cargo*: Set repository url
+- *release-plz*: Remove unnecessary parser
+- *workflows*: Unset registry token
+
+### Commit Statistics
+
+- 4 commit(s) contributed to the release.
+- 0 day(s) passed between the first and last commit.
+- 20767 day(s) passed between releases.
+
+[0.1.3](https://github.com/hasezoey/rodio-async-sync-bridge/compare/0.1.2..0.1.3)
+
 ## [0.1.2]
 
 Released on: 2026.11.10

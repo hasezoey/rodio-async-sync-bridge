@@ -618,7 +618,7 @@ dependencies = [
 
 [[package]]
 name = "rodio-async-sync-bridge"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-ringbuf",
  "criterion",
