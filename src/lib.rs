@@ -10,6 +10,7 @@ use std::{
 
 use async_ringbuf::{
     AsyncHeapRb,
+    WaitError,
     traits::{
         AsyncConsumer,
         AsyncProducer,
@@ -418,7 +419,11 @@ impl AsyncRingConsumer {
             // When not doing this, cpu load can be 1.0~1.4 on average.
             // When doing the current way, the load is ~0.5~0.6 on average, the same as if running the decoder directly as
             // as source instead of using this ringbuffer.
-            self.handle.block_on(self.inner.wait_occupied(wait_for_bytes));
+            if let Err(err) = self.handle.block_on(self.inner.wait_occupied(wait_for_bytes))
+                && err != WaitError::Closed
+            {
+                panic!("Failed to wait for occupied bytes: {:?}", err);
+            }
         }
 
         if self.inner.is_closed() && self.inner.is_empty() {
