@@ -3,7 +3,9 @@ name = "rodio-async-sync-bridge"
 version = "0.1.0"
 authors = ["hasezoey <hasezoey@gmail.com>"]
 edition = "2024"
-rust-version = "1.87" # should always match rodio's minimum supported Rust version
+# should always match rodio's minimum supported Rust version;
+# or the highest of any direct, non-optional dependency's minimum supported Rust version
+rust-version = "1.88"
 license = "MIT"
 
 [features]
