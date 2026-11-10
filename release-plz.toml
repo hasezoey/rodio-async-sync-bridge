@@ -97,10 +97,10 @@ body = """
             {{ self::print_commit(commit=commit) }}
         {% endif -%}
     {%- endfor -%}
-    {%- for commit in commits | filter(attribute="scope") | sort(attribute="scope") -%}
+    {% for commit in commits | filter(attribute="scope") | sort(attribute="scope") -%}
         {{ self::print_commit(commit=commit) }}
-    {% endfor -%}
-{% endfor %}
+    {% endfor %}
+{% endfor -%}
 ### Commit Statistics\n
 - {{ statistics.commit_count }} commit(s) contributed to the release.
 - {{ statistics.commits_timespan | default(value=0) }} day(s) passed between the first and last commit.
