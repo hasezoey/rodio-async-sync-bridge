@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.1.2]
+
+Released on: 2026.11.10
+
+### Dependencies
+
+- *async-ringbuf*: Update to 0.4.0
+- *rodio*: Upgrade to 0.23
+
+### Miscellaneous Tasks
+
+- *release-plz*: Gain back some spacing
+- *release-plz*: Even more adjust spacing
+- *release-plz*: Adjust spacing
+
+### Commit Statistics
+
+- 5 commit(s) contributed to the release.
+- 0 day(s) passed between the first and last commit.
+- 20767 day(s) passed between releases.
+
+[0.1.2](https://github.com/hasezoey/rodio-async-sync-bridge/compare/0.1.1..0.1.2)
+
 ## [0.1.1]
 
 Released on: 2026.11.10
