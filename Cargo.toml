@@ -7,6 +7,7 @@ edition = "2024"
 # or the highest of any direct, non-optional dependency's minimum supported Rust version
 rust-version = "1.88"
 license = "MIT"
+description = "A bridge for rodio from async to sync"
 
 [features]
 default = ["symphonia"]
