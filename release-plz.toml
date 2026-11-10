@@ -38,7 +38,6 @@ commit_parsers = [
     { message = "^style", group = "Styling", skip = true },
     { message = "^test", group = "<!-- 6 -->Testing" },
     # Release commits dont add anything noteworthy to add to a changelog
-    { message = "^chore\\(release\\): prepare for", skip = true },
     { message = "^chore", group = "<!-- 5 -->Miscellaneous Tasks" },
     # Merge commits themself dont add anything noteworthy
     { message = "^[mM]erge", skip = true },
