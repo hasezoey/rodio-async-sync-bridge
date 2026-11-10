@@ -61,30 +61,29 @@ pub type SeekData = (Duration, oneshot::Sender<usize>);
 /// The minimal size a decode-ringbuffer should have.
 ///
 /// Currently the size is based on 192kHz * 1 channel * 1 seconds, or 2 seconds of 48kHz stereo(2 channel) audio.
-// NOTE: try to keep this in-sync with the config's `RINGBUF_SIZE_DEFAULT`
 pub const MIN_RING_SIZE: usize = 192_000 * MessageDataValue::MESSAGE_SIZE;
 
-/// A ringbuffer Producer meant for wrapping [`Source`] to make decode & playback async and keep the buffer filled without having audible gaps.
+/// A ringbuffer Producer meant for async audio decoding and playback.
 ///
 /// The implementation of the Producer is meant for async code, awaiting to fully put data on the ringbuffer OR waiting for seek events.
 #[derive(Debug)]
-pub struct AsyncRingSourceProvider {
+pub struct AsyncRingProducer {
     inner:   ProdWrap,
     seek_rx: Arc<RwLock<mpsc::Receiver<SeekData>>>,
 
     data: Option<MessageDataActual>,
 }
 
-impl AsyncRingSourceProvider {
+impl AsyncRingProducer {
     fn new(wrap: ProdWrap, seek_rx: mpsc::Receiver<SeekData>) -> Self {
-        AsyncRingSourceProvider {
+        AsyncRingProducer {
             inner:   wrap,
             seek_rx: Arc::new(RwLock::new(seek_rx)),
             data:    None,
         }
     }
 
-    /// Check if the consumer ([`AsyncRingSource`]) is still connected and writes are possible
+    /// Check if the consumer ([`AsyncRingConsumer`]) is still connected and writes are possible
     #[allow(dead_code)] // can't use expect as this function is used in tests
     #[must_use]
     pub fn is_closed(&self) -> bool {
@@ -230,11 +229,38 @@ impl Future for WaitSeek {
     }
 }
 
-/// A ringbuffer Consumer meant for wrapping [`Source`] to make decode & playback async and keep the buffer filled without having audible gaps.
+/// Create a new ringbuffer bridge with an async producer and consumer.
+///
+/// Note that the ringbuffer size will be at least [`MIN_RING_SIZE`].
+#[must_use]
+pub fn new_bridge(
+    spec: &AudioSpec,
+    total_duration: Option<Duration>,
+    current_span_len: usize,
+    size: usize,
+    handle: Handle,
+) -> (AsyncRingProducer, AsyncRingConsumer) {
+    let size = size.max(MIN_RING_SIZE);
+    let ringbuf = AsyncHeapRb::<u8>::new(size);
+    let (prod, cons) = ringbuf.split();
+    let (tx, rx) = mpsc::channel(1);
+    let async_prod = AsyncRingProducer::new(ProdWrap::new(prod), rx);
+    let async_cons = AsyncRingConsumer::new(
+        ConsWrap::new(cons),
+        Some(tx),
+        spec,
+        total_duration,
+        current_span_len,
+        handle,
+    );
+    (async_prod, async_cons)
+}
+
+/// A sync ringbuffer Consumer
 ///
 /// The implementation of the Consumer is meant for sync code, only blocking when having to wait for more data.
 #[derive(Debug)]
-pub struct AsyncRingSource {
+pub struct AsyncRingConsumer {
     inner:   ConsWrap,
     /// Send a seek-to value to the producer.
     /// Also used to indicate to the producer that it should keep active.
@@ -252,39 +278,26 @@ pub struct AsyncRingSource {
     total_duration:   Option<Duration>,
 }
 
-impl AsyncRingSource {
-    /// Create a new ringbuffer, with initial channel spec and at least [`MIN_RING_SIZE`].
-    ///
-    /// # Panics
-    ///
-    /// If the given channels in `spec` cannot be converted to a u16 (which should never happen as there are only 26 defined channels)
-    #[must_use]
-    pub fn new(
+impl AsyncRingConsumer {
+    /// Create a new consumer for the ringbuffer.
+    fn new(
+        inner: ConsWrap,
+        seek_tx: Option<mpsc::Sender<SeekData>>,
         spec: &AudioSpec,
         total_duration: Option<Duration>,
         current_span_len: usize,
-        size: usize,
         handle: Handle,
-    ) -> (AsyncRingSourceProvider, Self) {
-        let size = size.max(MIN_RING_SIZE);
-        let ringbuf = AsyncHeapRb::<u8>::new(size);
-        let (prod, cons) = ringbuf.split();
-        // Channel if exactly 1 message size, as seeks should not happen often, and if they do, only one can be processed at once.
-        let (tx, rx) = mpsc::channel(1);
-
-        let async_prod = AsyncRingSourceProvider::new(ProdWrap::new(prod), rx);
-        let async_cons = Self {
-            inner: ConsWrap::new(cons),
-            seek_tx: Some(tx),
+    ) -> Self {
+        Self {
+            inner,
+            seek_tx,
             spec: *spec,
             total_duration,
             current_span_len,
             last_msg: None,
             buf: StaticBuf::new(),
             handle,
-        };
-
-        (async_prod, async_cons)
+        }
     }
 
     /// Ensure there is a complete message in `last_msg`.
@@ -443,7 +456,7 @@ impl AsyncRingSource {
     }
 }
 
-impl Source for AsyncRingSource {
+impl Source for AsyncRingConsumer {
     #[inline]
     fn current_span_len(&self) -> Option<usize> {
         // this workaround might not be great, but on "None" rodio *never* retries reading this value
@@ -499,7 +512,7 @@ impl Source for AsyncRingSource {
     }
 }
 
-impl Iterator for AsyncRingSource {
+impl Iterator for AsyncRingConsumer {
     type Item = Sample;
 
     #[inline]
@@ -545,7 +558,7 @@ impl Iterator for AsyncRingSource {
 }
 
 // Contract: once reaching a EOS or the ringbuffer being closed & having read all data, it will continue outputting None
-impl FusedIterator for AsyncRingSource {}
+impl FusedIterator for AsyncRingConsumer {}
 
 /// Static Buffer allocated on the stack, which can have a moving area of actual data within
 #[derive(Debug, Clone, Copy)]
@@ -817,12 +830,12 @@ mod tests {
         use rodio::Sample;
 
         use crate::{
-            AsyncRingSource,
             AudioSpec,
             MIN_RING_SIZE,
             MessageDataFirst,
             MessageSpec,
             RingMsgWrite2,
+            new_bridge,
         };
 
         #[tokio::test]
@@ -830,7 +843,7 @@ mod tests {
             let mut send = Vec::new();
             let recv = Arc::new(Mutex::new(Vec::new()));
 
-            let (mut prod, mut cons) = AsyncRingSource::new(
+            let (mut prod, mut cons) = new_bridge(
                 &AudioSpec::new_checked(44000, 2).unwrap(),
                 None,
                 1024,
@@ -895,7 +908,7 @@ mod tests {
         async fn prod_should_not_exist_before_cons() {
             let order = Arc::new(Mutex::new(Vec::new()));
 
-            let (mut prod, mut cons) = AsyncRingSource::new(
+            let (mut prod, mut cons) = new_bridge(
                 &AudioSpec::new_checked(44000, 2).unwrap(),
                 None,
                 1024,
@@ -969,7 +982,7 @@ mod tests {
         async fn should_consume_on_prod_exit_eos() {
             let recv = Arc::new(Mutex::new(Vec::new()));
 
-            let (mut prod, mut cons) = AsyncRingSource::new(
+            let (mut prod, mut cons) = new_bridge(
                 &AudioSpec::new_checked(44000, 2).unwrap(),
                 None,
                 1024,
@@ -1023,7 +1036,7 @@ mod tests {
         async fn should_consume_on_prod_exit() {
             let recv = Arc::new(Mutex::new(Vec::new()));
 
-            let (mut prod, mut cons) = AsyncRingSource::new(
+            let (mut prod, mut cons) = new_bridge(
                 &AudioSpec::new_checked(44000, 2).unwrap(),
                 None,
                 1024,

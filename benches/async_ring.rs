@@ -7,8 +7,8 @@ use criterion::{
     criterion_main,
 };
 use rodio_async_sync_bridge::{
-    AsyncRingSource,
     AudioSpec,
+    new_bridge,
 };
 use tokio::runtime::Builder;
 
@@ -19,8 +19,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let total_duration = Some(Duration::from_secs(0));
     let current_frame_len = 0;
 
-    let (mut prod, mut cons) =
-        AsyncRingSource::new(&spec, total_duration, current_frame_len, 0, runtime.handle().clone());
+    let (mut prod, mut cons) = new_bridge(&spec, total_duration, current_frame_len, 0, runtime.handle().clone());
 
     // spawn a infinitely producing producer
     std::thread::spawn(move || {

@@ -22,7 +22,7 @@ The consumer side can be simply plugged in where a source can be put. The produc
 let spec = decoder.spec();
 
 // Note that the following values are just placeholders, and should be adjusted to your needs
-let (prod, cons) = AsyncRingSource::new(
+let (prod, cons) = new_bridge(
   AudioSpec::new_checked(spec.rate, spec.channels).unwrap(),
   decoder.duration(),
   decoder.buffer_len(),

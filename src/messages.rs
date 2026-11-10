@@ -8,6 +8,7 @@ use std::{
 
 use rodio::Sample;
 
+/// Specification for audio format, including sample rate and number of channels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AudioSpec {
     rate:     rodio::SampleRate,
