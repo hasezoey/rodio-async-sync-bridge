@@ -59,8 +59,7 @@ pub use messages::AudioSpec;
 #[derive(Debug)]
 pub struct SeekCallback(oneshot::Sender<usize>);
 
-/// Seek Channel data, the first is the point to seek to in the decoder
-/// the second is a callback that the seek is done and how many elements to skip until new data.
+/// Data to send over the Seek Channel.
 #[derive(Debug)]
 pub struct SeekData {
     /// The point to seek to in the decoder.
