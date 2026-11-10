@@ -16,7 +16,7 @@ symphonia = ["dep:symphonia"]
 
 [dependencies]
 log = "0.4.27"
-rodio = { version = "0.22", default-features = false, features = [] }
+rodio = { version = "0.23", default-features = false, features = [] }
 async-ringbuf = "0.3.6"
 parking_lot = "^0.12.5"
 tokio = { version = "1.52", default-features = false, features = ["rt", "sync"] }
