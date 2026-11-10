@@ -60,6 +60,64 @@ All notable changes to this project will be documented in this file.\n
 # A Tera template to be rendered for each release in the changelog.
 # See https://keats.github.io/tera/docs/#introduction
 body = """
+{%- macro remote_url(commit) -%}
+    https://github.com/{{ commit.remote.owner }}/{{ commit.remote.repo }}
+{%- endmacro -%}
+{%- macro scoped(commit) -%}
+    {% if commit.scope -%} *{{ commit.scope | split(pat="::") | first }}*: {% endif %}
+{%- endmacro -%}
+{%- macro first_message(commit) -%}
+    {{ commit.message | split(pat="\n") | first | upper_first | trim_end }}
+{%- endmacro -%}
+{%- macro print_commit(commit) -%}
+    - {{ self::scoped(commit=commit) }}\
+        {{ self::first_message(commit=commit) }}\
+        {% if commit.remote.pr_number %} ([#{{ commit.remote.pr_number }}]({{ self::remote_url(commit=commit) }}/pull/{{ commit.remote.pr_number }})){% endif %}
+{%- endmacro -%}
+
+{% if version %}\
+    ## [{{ version }}]
+
+    Released on: {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+    ## [Unreleased]
+{% endif %}
+{% if commits | filter(attribute="breaking", value=true) | length != 0 %}\
+    ### Breaking Changes
+    {% for commit in commits| filter(attribute="breaking", value=true) %}
+        - {{ self::scoped(commit=commit) }}\
+            {{ self::first_message(commit=commit) }}\
+            {% if commit.remote.pr_number %} ([#{{ commit.remote.pr_number }}]({{ self::remote_url(commit=commit) }}/pull/{{ commit.remote.pr_number }})){% endif %}
+            {% raw %}  {% endraw %}- **BREAKING CHANGE**: {{ commit.breaking_description }}
+    {% endfor -%}
+{% endif -%}
+
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group | striptags | trim | upper_first }}
+
+    {% for commit in commits %}
+        {%- if commit.scope -%}
+        {% else -%}
+            {{ self::print_commit(commit=commit) }}
+        {% endif -%}
+    {%- endfor -%}
+    {%- for commit in commits | filter(attribute="scope") | sort(attribute="scope") -%}
+        {{ self::print_commit(commit=commit) }}
+    {% endfor -%}
+{% endfor %}
+### Commit Statistics\n
+- {{ statistics.commit_count }} commit(s) contributed to the release.
+- {{ statistics.commits_timespan | default(value=0) }} day(s) passed between the first and last commit.
+{%- if statistics.days_passed_since_last_release %}
+	- {{ statistics.days_passed_since_last_release }} day(s) passed between releases.
+{%- endif %}
+
+{% if version %}\
+    [{{ version }}]({{ self::remote_url(commit=commits[0]) }}/compare/{{ previous.version }}..{{ version }})
+{% else %}\
+    [Unreleased]: {{ self::remote_url(commit=commits[0]) }}/compare/{{ previous.version }}..HEAD
+{% endif %}\n
+
 DEBUG:
 ```txt
 {{ dump }}
