@@ -56,7 +56,20 @@ pub use messages::AudioSpec;
 
 /// Seek Channel data, the first is the point to seek to in the decoder
 /// the second is a callback that the seek is done and how many elements to skip until new data.
-pub type SeekData = (Duration, oneshot::Sender<usize>);
+#[derive(Debug)]
+pub struct SeekData {
+    /// The point to seek to in the decoder.
+    pub seek_to:  Duration,
+    /// The callback that is called when the seek is done, with the number of bytes to skip until new data.
+    pub callback: oneshot::Sender<usize>,
+}
+
+impl SeekData {
+    /// Create a new `SeekData` instance.
+    pub fn new(seek_to: Duration, callback: oneshot::Sender<usize>) -> Self {
+        SeekData { seek_to, callback }
+    }
+}
 
 /// The minimal size a decode-ringbuffer should have.
 ///
@@ -495,7 +508,7 @@ impl Source for AsyncRingConsumer {
         self.buf.clear();
 
         let (cb_tx, cb_rx) = oneshot::channel();
-        let _ = self.seek_tx.as_mut().unwrap().blocking_send((pos, cb_tx));
+        let _ = self.seek_tx.as_mut().unwrap().blocking_send(SeekData::new(pos, cb_tx));
 
         // Wait for the Producer to have processed the seek and get the final value of elements to skip
         let to_skip = cb_rx.blocking_recv().map_err(|_| {

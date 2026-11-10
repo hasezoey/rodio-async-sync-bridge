@@ -49,10 +49,10 @@ loop {
       // "seek" being "None" here means that the seek channel is closed, which in turn means we can abort decoding.
       let seek = seek?;
       
-      decoder.try_seek(seek.rate).unwrap();
+      decoder.try_seek(seek.seek_to).unwrap();
 
       let spec = decoder.spec();
-      prod.process_seek(&spec.rate, spec.channels, seek.1).await;
+      prod.process_seek(&AudioSpec::new_checked(spec.rate, spec.channels).unwrap(), decoder.buffer_len(), seek.cb).await;
     }
   }
 
@@ -63,7 +63,7 @@ loop {
   }
   let new_spec = decoder.spec();
   if old_spec != new_spec {
-    prod.new_spec(&new_spec.rate, new_spec.channels);
+    prod.new_spec(&AudioSpec::new_checked(new_spec.rate, new_spec.channels).unwrap(), decoder.buffer_len());
   }
 }
 ```
