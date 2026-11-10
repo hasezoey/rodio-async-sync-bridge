@@ -112,9 +112,9 @@ body = """
 	- {{ statistics.days_passed_since_last_release }} day(s) passed between releases.
 {%- endif %}
 
-{% if version %}\
+{% if version and previous.version %}\
     [{{ version }}]({{ self::remote_url() }}/compare/{{ previous.version }}..{{ version }})
-{% else %}\
+{% elif previous.version %}\
     [Unreleased]: {{ self::remote_url() }}/compare/{{ previous.version }}..HEAD
 {% endif %}\n
 
