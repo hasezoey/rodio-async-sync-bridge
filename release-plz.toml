@@ -117,13 +117,6 @@ body = """
 {% elif previous.version %}\
     [Unreleased]: {{ self::remote_url() }}/compare/{{ previous.version }}..HEAD
 {% endif %}\n
-
-DEBUG:
-```txt
-{{ remote | json }}
----
-{{ commits | json }}
-```
 """
 # Remove leading and trailing whitespaces from the changelog's body.
 trim = true
