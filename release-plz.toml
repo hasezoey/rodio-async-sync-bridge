@@ -61,7 +61,7 @@ All notable changes to this project will be documented in this file.\n
 # See https://keats.github.io/tera/docs/#introduction
 body = """
 {%- macro remote_url(commit) -%}
-    https://github.com/{{ commit.remote.github.owner }}/{{ commit.remote.github.repo }}
+    https://github.com/{{ commit.remote.owner }}/{{ commit.remote.repo }}
 {%- endmacro -%}
 {%- macro scoped(commit) -%}
     {% if commit.scope -%} *{{ commit.scope | split(pat="::") | first }}*: {% endif %}
