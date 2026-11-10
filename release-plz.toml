@@ -60,8 +60,8 @@ All notable changes to this project will be documented in this file.\n
 # A Tera template to be rendered for each release in the changelog.
 # See https://keats.github.io/tera/docs/#introduction
 body = """
-{%- macro remote_url() -%}
-    https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}
+{%- macro remote_url(commit) -%}
+    https://github.com/{{ commit.remote.github.owner }}/{{ commit.remote.github.repo }}
 {%- endmacro -%}
 {%- macro scoped(commit) -%}
     {% if commit.scope -%} *{{ commit.scope | split(pat="::") | first }}*: {% endif %}
@@ -72,7 +72,7 @@ body = """
 {%- macro print_commit(commit) -%}
     - {{ self::scoped(commit=commit) }}\
         {{ self::first_message(commit=commit) }}\
-        {% if commit.remote.pr_number %} ([#{{ commit.remote.pr_number }}]({{ self::remote_url() }}/pull/{{ commit.remote.pr_number }})){% endif %}
+        {% if commit.remote.pr_number %} ([#{{ commit.remote.pr_number }}]({{ self::remote_url(commit=commit) }}/pull/{{ commit.remote.pr_number }})){% endif %}
 {%- endmacro -%}
 
 {% if version %}\
@@ -87,7 +87,7 @@ body = """
     {% for commit in commits| filter(attribute="breaking", value=true) %}
         - {{ self::scoped(commit=commit) }}\
             {{ self::first_message(commit=commit) }}\
-            {% if commit.remote.pr_number %} ([#{{ commit.remote.pr_number }}]({{ self::remote_url() }}/pull/{{ commit.remote.pr_number }})){% endif %}
+            {% if commit.remote.pr_number %} ([#{{ commit.remote.pr_number }}]({{ self::remote_url(commit=commit) }}/pull/{{ commit.remote.pr_number }})){% endif %}
             {% raw %}  {% endraw %}- **BREAKING CHANGE**: {{ commit.breaking_description }}
     {% endfor -%}
 {% endif -%}
@@ -113,9 +113,9 @@ body = """
 {%- endif %}
 
 {% if version %}\
-    [{{ version }}]({{ self::remote_url() }}/compare/{{ previous.version }}..{{ version }})
+    [{{ version }}]({{ self::remote_url(commit=commits[0]) }}/compare/{{ previous.version }}..{{ version }})
 {% else %}\
-    [Unreleased]: {{ self::remote_url() }}/compare/{{ previous.version }}..HEAD
+    [Unreleased]: {{ self::remote_url(commit=commits[0]) }}/compare/{{ previous.version }}..HEAD
 {% endif %}\n
 """
 # Remove leading and trailing whitespaces from the changelog's body.
