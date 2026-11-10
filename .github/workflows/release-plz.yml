@@ -17,6 +17,7 @@ jobs:
     name: Release-plz release
     runs-on: ubuntu-latest
     if: ${{ github.repository_owner == 'hasezoey' }}
+    environment: release-plz
     permissions:
       contents: write
       pull-requests: read
@@ -45,6 +46,7 @@ jobs:
     name: Release-plz PR
     runs-on: ubuntu-latest
     if: ${{ github.repository_owner == 'hasezoey' }}
+    environment: release-plz
     permissions:
       contents: write
       pull-requests: write
