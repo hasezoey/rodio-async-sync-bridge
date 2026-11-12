@@ -107,13 +107,17 @@ impl AsyncRingProducer {
         self.inner.is_closed()
     }
 
-    /// Write a new spec.
+    /// Write a new spec to the ring buffer.
     ///
     /// Returns [`Ok(count)`](Ok) if the message is written, with the length, [`Err`] if closed.
     ///
     /// Returns [`None`] if the ring buffer is closed.
+    ///
+    /// # Cancel Safety
+    ///
+    /// This future either completely writes the message, or not at all, making it completely cancel safe.
     #[allow(clippy::missing_panics_doc)] // https://github.com/rust-lang/rust-clippy/issues/14534
-    pub async fn new_spec(&mut self, spec: &AudioSpec, current_span_len: usize) -> Option<usize> {
+    pub async fn write_new_spec(&mut self, spec: &AudioSpec, current_span_len: usize) -> Option<usize> {
         let mut msg_buf = [0; RingMsgWrite2::get_msg_size(MessageSpec::MESSAGE_SIZE)];
         // SAFETY: we allocated the exact necessary size, this can never fail
         // #[expect(
@@ -127,13 +131,13 @@ impl AsyncRingProducer {
         Some(msg_buf.len())
     }
 
-    /// Write a new data message, without the buffer yet.
+    /// Write the header of the data message, without writing any data bytes yet.
     ///
     /// Returns [`Ok(count)`](Ok) if the message is written, with the length, [`Err`] if closed.
     ///
     /// Returns [`None`] if the ring buffer is closed.
     #[allow(clippy::missing_panics_doc)] // https://github.com/rust-lang/rust-clippy/issues/14534
-    async fn new_data(&mut self, length: usize) -> Option<usize> {
+    async fn write_data_header(&mut self, length: usize) -> Option<usize> {
         let mut msg_buf = [0; RingMsgWrite2::get_msg_size(MessageDataFirst::MESSAGE_SIZE)];
         // SAFETY: we allocated the exact necessary size, this can never fail
         // #[expect(
@@ -156,7 +160,7 @@ impl AsyncRingProducer {
     /// Returns [`Ok(count)`](Ok) if the message is written, with the length, [`Err`] if closed.
     ///
     /// Returns [`None`] if the ring buffer is closed.
-    async fn write_data_inner(&mut self, data: &[u8]) -> Option<usize> {
+    async fn write_data_bytes(&mut self, data: &[u8]) -> Option<usize> {
         let Some(msg) = &mut self.data else {
             unimplemented!("This should be checked outside of the function");
         };
@@ -168,11 +172,15 @@ impl AsyncRingProducer {
         Some(buf.len())
     }
 
-    /// Write a given buffer as a data message.
+    /// Create a Future that waits until the data is completely written.
     ///
     /// Returns [`Ok(count)`](Ok) if the message is written, with the length, [`Err`] if closed.
     ///
     /// Returns [`None`] if the ring buffer is closed.
+    ///
+    /// # Cancel Safety
+    ///
+    /// This future is only cancel safe if the next action is to drop the producer, or process a seek (discarding all data)
     #[allow(clippy::missing_panics_doc)] // https://github.com/rust-lang/rust-clippy/issues/14534
     pub async fn write_data(&mut self, data: &[u8]) -> Option<usize> {
         if data.is_empty() {
@@ -181,7 +189,7 @@ impl AsyncRingProducer {
 
         let mut written = 0;
         if self.data.is_none() {
-            written += self.new_data(data.len()).await?;
+            written += self.write_data_header(data.len()).await?;
         }
 
         // #[expect(
@@ -189,7 +197,7 @@ impl AsyncRingProducer {
         //     reason = "it is ensured to be Some via if and `new_data` above"
         // )]
         while !self.data.as_mut().unwrap().is_done() && !self.inner.is_closed() {
-            written += self.write_data_inner(data).await?;
+            written += self.write_data_bytes(data).await?;
         }
 
         self.data.take();
@@ -197,13 +205,17 @@ impl AsyncRingProducer {
         Some(written)
     }
 
-    /// Write a EOS message.
+    /// Write a End-of-Stream (EOS) message.
     ///
     /// Returns [`Ok(count)`](Ok) if the message is written, with the length, [`Err`] if closed.
     ///
     /// Returns [`None`] if the ring buffer is closed.
+    ///
+    /// # Cancel Safety
+    ///
+    /// This future either completely writes the message, or not at all, making it completely cancel safe.
     #[allow(clippy::missing_panics_doc)] // https://github.com/rust-lang/rust-clippy/issues/14534
-    pub async fn new_eos(&mut self) -> Option<usize> {
+    pub async fn write_eos(&mut self) -> Option<usize> {
         let mut msg_buf = [0; RingMsgWrite2::get_msg_size(0)];
         // SAFETY: we allocated the exact necessary size, this can never fail
         // #[expect(
@@ -217,7 +229,7 @@ impl AsyncRingProducer {
         Some(msg_buf.len())
     }
 
-    /// Wait until the seek channel is dropped([`None`]) or a seek is requested([`Some`]).
+    /// Create a Future to await until the seek channel is dropped([`None`]) or a seek is requested([`Some`]).
     pub fn wait_seek(&mut self) -> WaitSeek {
         WaitSeek(self.seek_rx.clone())
     }
@@ -226,11 +238,11 @@ impl AsyncRingProducer {
     ///
     /// This clear all data state, calls the consumer to resume with how many bytes to skip
     /// and sends the new spec (in case it changed in the seek).
-    pub async fn process_seek(&mut self, spec: &AudioSpec, current_span_len: usize, cb: SeekCallback) {
+    pub async fn finish_seek(&mut self, spec: &AudioSpec, current_span_len: usize, cb: SeekCallback) {
         self.data.take();
         let bytes_to_skip = self.inner.occupied_len();
         let _ = cb.0.send(bytes_to_skip);
-        let _ = self.new_spec(spec, current_span_len).await;
+        let _ = self.write_new_spec(spec, current_span_len).await;
     }
 }
 
@@ -896,7 +908,7 @@ mod tests {
             send.extend_from_slice(&first_data);
 
             let new_spec = AudioSpec::new_checked(48000, 2).unwrap();
-            let written = prod.new_spec(&new_spec, 1024).await.unwrap();
+            let written = prod.write_new_spec(&new_spec, 1024).await.unwrap();
             assert_eq!(written, RingMsgWrite2::get_msg_size(MessageSpec::MESSAGE_SIZE));
 
             let second_data = 2f32.to_le_bytes().repeat(1024);
@@ -907,7 +919,7 @@ mod tests {
             );
             send.extend_from_slice(&second_data);
 
-            let written = prod.new_eos().await.unwrap();
+            let written = prod.write_eos().await.unwrap();
             assert_eq!(written, RingMsgWrite2::get_msg_size(0));
 
             assert!(prod.write_data(&[]).await.is_none());
@@ -971,7 +983,7 @@ mod tests {
                 assert!(obsv_c.write_is_held());
 
                 order_c.lock().push("send_eos");
-                let written = prod.new_eos().await.unwrap();
+                let written = prod.write_eos().await.unwrap();
                 assert_eq!(written, RingMsgWrite2::get_msg_size(0));
 
                 // "wait_seek" can only return here if the channel gets closed, which happens when the consumer reaches the EOS message (not just on drop)
@@ -1032,7 +1044,7 @@ mod tests {
                 RingMsgWrite2::get_msg_size(MessageDataFirst::MESSAGE_SIZE + first_data.len())
             );
 
-            let written = prod.new_eos().await.unwrap();
+            let written = prod.write_eos().await.unwrap();
             assert_eq!(written, RingMsgWrite2::get_msg_size(0));
 
             let obsv = prod.inner.observe();

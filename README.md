@@ -52,18 +52,18 @@ loop {
       decoder.try_seek(seek.seek_to).unwrap();
 
       let spec = decoder.spec();
-      prod.process_seek(&AudioSpec::new_checked(spec.rate, spec.channels).unwrap(), decoder.buffer_len(), seek.cb).await;
+      prod.finish_seek(&AudioSpec::new_checked(spec.rate, spec.channels).unwrap(), decoder.buffer_len(), seek.cb).await;
     }
   }
 
   let old_spec = decoder.spec();
   if decoder.decode().is_none() {
-    prod.new_eos().await?;
+    prod.write_eos().await?;
     send_eos = true;
   }
   let new_spec = decoder.spec();
   if old_spec != new_spec {
-    prod.new_spec(&AudioSpec::new_checked(new_spec.rate, new_spec.channels).unwrap(), decoder.buffer_len());
+    prod.write_new_spec(&AudioSpec::new_checked(new_spec.rate, new_spec.channels).unwrap(), decoder.buffer_len());
   }
 }
 ```
