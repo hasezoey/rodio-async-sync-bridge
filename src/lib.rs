@@ -896,7 +896,9 @@ mod tests {
 
     mod ringbuffer {
         use std::{
+            future::Future,
             sync::Arc,
+            task::Poll,
             time::Duration,
         };
 
@@ -975,6 +977,58 @@ mod tests {
             assert_eq!(recv_lock.len(), value_size * 1024 * 2);
 
             assert_eq!(*send, *recv_lock);
+        }
+
+        #[tokio::test]
+        async fn resumes_cancelled_data_write() {
+            let (mut prod, cons) = new_bridge(
+                &AudioSpec::new_checked(44000, 2).unwrap(),
+                None,
+                1024,
+                0,
+                tokio::runtime::Handle::current(),
+            );
+
+            // Make the message larger than the ring so a write cannot finish while the consumer is idle.
+            let samples: Vec<Sample> = (0..MIN_RING_SIZE / size_of::<Sample>() + 1024)
+                .map(|index| (index % 97) as Sample / 97.0)
+                .collect();
+            let data: Vec<u8> = samples.iter().flat_map(|sample| sample.to_ne_bytes()).collect();
+
+            {
+                let future = prod.write_data(&data);
+                tokio::pin!(future);
+                // One poll writes the header and as much payload as fits, then waits for more space.
+                // Returning Ready on Pending lets this scope drop the still-pending write future.
+                std::future::poll_fn(|context| match future.as_mut().poll(context) {
+                    Poll::Pending => Poll::Ready(()),
+                    Poll::Ready(_) => panic!("write completed before cancellation"),
+                })
+                .await;
+            }
+
+            // Keep the consumer idle until after cancellation, ensuring the first poll filled the ring.
+            assert_eq!(prod.inner.vacant_len(), 0);
+            let message = prod.data.as_ref().unwrap();
+            assert!(message.get_range().start > 0);
+            assert!(!message.is_done());
+
+            // Retry with the same input; the consumer checks that the already-written prefix is not duplicated.
+            let handle = tokio::task::spawn_blocking(move || cons.collect::<Vec<_>>());
+            let result = tokio::time::timeout(Duration::from_secs(3), async {
+                let written = prod.write_data(&data).await.unwrap();
+                assert!(written < data.len());
+                prod.write_eos().await.unwrap();
+            })
+            .await;
+            drop(prod);
+
+            assert!(result.is_ok(), "Write did not complete within 3 seconds");
+            let received = tokio::time::timeout(Duration::from_secs(3), handle)
+                .await
+                .expect("Read task did not complete within 3 seconds")
+                .unwrap();
+            assert_eq!(received, samples);
         }
 
         // the producer should not exit before the consumer in a actual use-case
