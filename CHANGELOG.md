@@ -20,9 +20,9 @@ Released on: 2026.11.12
 
 - Rename send functions to be more intuitive
   - **BREAKING CHANGE**: Functions got renamed:
-"new_spec" -> "write_new_spec"
+"new_spec" -> "write_spec"
 "new_eos" -> "write_eos"
-"process_seek" -> "finish_seek"
+"process_seek" -> "complete_seek"
 
 ### Features
 
