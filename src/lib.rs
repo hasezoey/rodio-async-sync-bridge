@@ -275,7 +275,12 @@ impl AsyncRingProducer {
     /// # Cancel Safety
     ///
     /// This future is *not* cancel safe. It expects to be awaited to completion once called.
-    pub async fn complete_seek(&mut self, spec: &AudioSpec, current_span_len: usize, cb: SeekCallback) -> Option<usize> {
+    pub async fn complete_seek(
+        &mut self,
+        spec: &AudioSpec,
+        current_span_len: usize,
+        cb: SeekCallback,
+    ) -> Option<usize> {
         self.data.take();
         let bytes_to_skip = self.inner.occupied_len();
         let _ = cb.0.send(bytes_to_skip);
