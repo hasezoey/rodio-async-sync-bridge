@@ -87,9 +87,9 @@ impl RingMessages {
 
 /// Writer for Ringbuffer messages.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct RingMsgWrite2;
+pub struct RingMsgWrite;
 
-impl RingMsgWrite2 {
+impl RingMsgWrite {
     pub const ID_SIZE: usize = 1;
 
     /// Add the [`ID_SIZE`](Self::ID_SIZE) to the given size to get the full message size.
@@ -155,7 +155,7 @@ impl RingMsgWrite2 {
 
 /// Reader for Ringbuffer messages.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum RingMsgParse2 {
+pub enum RingMsgParse {
     Spec,
     Data(MessageDataActual),
     Eos,
@@ -771,18 +771,18 @@ mod tests {
             MessageDataValue,
             MessageSpec,
             RingMessages,
-            RingMsgWrite2,
+            RingMsgWrite,
             messages::SAMPLE_TYPE_SIZE,
         };
 
         #[test]
         fn should_write_complete_once_spec() {
-            let out_buf = &mut [0; RingMsgWrite2::get_msg_size(MessageSpec::MESSAGE_SIZE)];
-            assert_eq!(out_buf.len(), MessageSpec::MESSAGE_SIZE + RingMsgWrite2::ID_SIZE);
+            let out_buf = &mut [0; RingMsgWrite::get_msg_size(MessageSpec::MESSAGE_SIZE)];
+            assert_eq!(out_buf.len(), MessageSpec::MESSAGE_SIZE + RingMsgWrite::ID_SIZE);
 
-            let res = RingMsgWrite2::try_write_spec(&AudioSpec::new_checked(44000, 2).unwrap(), 10, out_buf);
+            let res = RingMsgWrite::try_write_spec(&AudioSpec::new_checked(44000, 2).unwrap(), 10, out_buf);
 
-            assert_eq!(res, Ok(((), RingMsgWrite2::ID_SIZE + MessageSpec::MESSAGE_SIZE)));
+            assert_eq!(res, Ok(((), RingMsgWrite::ID_SIZE + MessageSpec::MESSAGE_SIZE)));
 
             let expected: Vec<u8> = [RingMessages::Spec.as_u8()]
                 .into_iter()
@@ -795,19 +795,19 @@ mod tests {
 
         #[test]
         fn should_write_complete_once_data() {
-            let out_buf = &mut [0; RingMsgWrite2::get_msg_size(MessageDataFirst::MESSAGE_SIZE + SAMPLE_TYPE_SIZE)];
+            let out_buf = &mut [0; RingMsgWrite::get_msg_size(MessageDataFirst::MESSAGE_SIZE + SAMPLE_TYPE_SIZE)];
             assert_eq!(
                 out_buf.len(),
-                MessageDataFirst::MESSAGE_SIZE + SAMPLE_TYPE_SIZE + RingMsgWrite2::ID_SIZE
+                MessageDataFirst::MESSAGE_SIZE + SAMPLE_TYPE_SIZE + RingMsgWrite::ID_SIZE
             );
 
-            let res = RingMsgWrite2::try_write_data_first(SAMPLE_TYPE_SIZE, out_buf);
+            let res = RingMsgWrite::try_write_data_first(SAMPLE_TYPE_SIZE, out_buf);
 
             assert_eq!(
                 res,
                 Ok((
                     MessageDataActual::new_write(4),
-                    RingMsgWrite2::ID_SIZE + MessageDataFirst::MESSAGE_SIZE
+                    RingMsgWrite::ID_SIZE + MessageDataFirst::MESSAGE_SIZE
                 ))
             );
             let expected: Vec<u8> = [RingMessages::Data.as_u8()]
@@ -837,12 +837,12 @@ mod tests {
 
         #[test]
         fn should_write_complete_once_eos() {
-            let out_buf = &mut [0; RingMsgWrite2::ID_SIZE];
-            assert_eq!(out_buf.len(), RingMsgWrite2::ID_SIZE);
+            let out_buf = &mut [0; RingMsgWrite::ID_SIZE];
+            assert_eq!(out_buf.len(), RingMsgWrite::ID_SIZE);
 
-            let res = RingMsgWrite2::try_write_eos(out_buf);
+            let res = RingMsgWrite::try_write_eos(out_buf);
 
-            assert_eq!(res, Ok(((), RingMsgWrite2::ID_SIZE)));
+            assert_eq!(res, Ok(((), RingMsgWrite::ID_SIZE)));
 
             let expected: &[u8] = &[RingMessages::Eos.as_u8()];
             assert_eq!(out_buf, expected);

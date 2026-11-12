@@ -43,8 +43,8 @@ use messages::{
     MessageSpec,
     MessageSpecResult,
     RingMessages,
-    RingMsgParse2,
-    RingMsgWrite2,
+    RingMsgParse,
+    RingMsgWrite,
 };
 use wrap::{
     ConsWrap,
@@ -118,13 +118,13 @@ impl AsyncRingProducer {
     /// This future either completely writes the message, or not at all, making it completely cancel safe.
     #[allow(clippy::missing_panics_doc)] // https://github.com/rust-lang/rust-clippy/issues/14534
     pub async fn write_new_spec(&mut self, spec: &AudioSpec, current_span_len: usize) -> Option<usize> {
-        let mut msg_buf = [0; RingMsgWrite2::get_msg_size(MessageSpec::MESSAGE_SIZE)];
+        let mut msg_buf = [0; RingMsgWrite::get_msg_size(MessageSpec::MESSAGE_SIZE)];
         // SAFETY: we allocated the exact necessary size, this can never fail
         // #[expect(
         //     clippy::missing_panics_doc,
         //     reason = "static buffer with exact size required created above"
         // )]
-        let _ = RingMsgWrite2::try_write_spec(spec, current_span_len, &mut msg_buf).unwrap();
+        let _ = RingMsgWrite::try_write_spec(spec, current_span_len, &mut msg_buf).unwrap();
 
         // Wait for enough free space to write everything at once.
         // With "push_exact", it could write the data partially, which is not cancel safe.
@@ -141,13 +141,13 @@ impl AsyncRingProducer {
     /// Returns [`None`] if the ring buffer is closed.
     #[allow(clippy::missing_panics_doc)] // https://github.com/rust-lang/rust-clippy/issues/14534
     async fn write_data_header(&mut self, length: usize) -> Option<usize> {
-        let mut msg_buf = [0; RingMsgWrite2::get_msg_size(MessageDataFirst::MESSAGE_SIZE)];
+        let mut msg_buf = [0; RingMsgWrite::get_msg_size(MessageDataFirst::MESSAGE_SIZE)];
         // SAFETY: we allocated the exact necessary size, this can never fail
         // #[expect(
         //     clippy::missing_panics_doc,
         //     reason = "static buffer with exact size required created above"
         // )]
-        let (data, _written) = RingMsgWrite2::try_write_data_first(length, &mut msg_buf).unwrap();
+        let (data, _written) = RingMsgWrite::try_write_data_first(length, &mut msg_buf).unwrap();
 
         // Wait for enough free space to write everything at once.
         // With "push_exact", it could write the data partially, which is not cancel safe.
@@ -243,13 +243,13 @@ impl AsyncRingProducer {
     /// This future either completely writes the message, or not at all, making it completely cancel safe.
     #[allow(clippy::missing_panics_doc)] // https://github.com/rust-lang/rust-clippy/issues/14534
     pub async fn write_eos(&mut self) -> Option<usize> {
-        let mut msg_buf = [0; RingMsgWrite2::get_msg_size(0)];
+        let mut msg_buf = [0; RingMsgWrite::get_msg_size(0)];
         // SAFETY: we allocated the exact necessary size, this can never fail
         // #[expect(
         //     clippy::missing_panics_doc,
         //     reason = "static buffer with exact size required created above"
         // )]
-        let _ = RingMsgWrite2::try_write_eos(&mut msg_buf).unwrap();
+        let _ = RingMsgWrite::try_write_eos(&mut msg_buf).unwrap();
 
         // Wait for enough free space to write everything at once.
         // With "push_exact", it could write the data partially, which is not cancel safe.
@@ -371,7 +371,7 @@ impl AsyncRingConsumer {
     ///
     /// This function assumes there is no current message.
     #[must_use]
-    fn read_msg(&mut self) -> Option<RingMsgParse2> {
+    fn read_msg(&mut self) -> Option<RingMsgParse> {
         // trace!("Reading a message from the ringbuffer");
 
         self.load_more_data(1)?;
@@ -391,7 +391,7 @@ impl AsyncRingConsumer {
 
         // Eos event does not have more than the id itself
         if detected_type == RingMessages::Eos {
-            return Some(RingMsgParse2::Eos);
+            return Some(RingMsgParse::Eos);
         }
 
         let mut wait_for_bytes = 1;
@@ -418,7 +418,7 @@ impl AsyncRingConsumer {
                         },
                     };
 
-                    (RingMsgParse2::Data(data_res), read)
+                    (RingMsgParse::Data(data_res), read)
                 },
                 RingMessages::Spec => {
                     let (spec_res, read) = match MessageSpec::try_read_buf(self.buf.get_ref()) {
@@ -432,7 +432,7 @@ impl AsyncRingConsumer {
                     self.apply_spec_msg(spec_res);
                     self.current_span_len = spec_res.current_span_len;
 
-                    (RingMsgParse2::Spec, read)
+                    (RingMsgParse::Spec, read)
                 },
                 RingMessages::Eos => unreachable!("Message EOS is returned earlier"),
             };
@@ -616,11 +616,11 @@ impl Iterator for AsyncRingConsumer {
             let msg = self.read_msg()?;
 
             match msg {
-                RingMsgParse2::Spec => {},
-                RingMsgParse2::Data(message_data_actual) => {
+                RingMsgParse::Spec => {},
+                RingMsgParse::Data(message_data_actual) => {
                     self.last_msg = Some(message_data_actual);
                 },
-                RingMsgParse2::Eos => {
+                RingMsgParse::Eos => {
                     trace!("Reached EOS message");
                     let _ = self.seek_tx.take();
                     // this indicates to rodio via Source::current_span_len that there is no more data
@@ -915,7 +915,7 @@ mod tests {
             MIN_RING_SIZE,
             MessageDataFirst,
             MessageSpec,
-            RingMsgWrite2,
+            RingMsgWrite,
             new_bridge,
         };
 
@@ -947,24 +947,24 @@ mod tests {
             let written = prod.write_data(&first_data).await.unwrap();
             assert_eq!(
                 written,
-                RingMsgWrite2::get_msg_size(MessageDataFirst::MESSAGE_SIZE + first_data.len())
+                RingMsgWrite::get_msg_size(MessageDataFirst::MESSAGE_SIZE + first_data.len())
             );
             send.extend_from_slice(&first_data);
 
             let new_spec = AudioSpec::new_checked(48000, 2).unwrap();
             let written = prod.write_new_spec(&new_spec, 1024).await.unwrap();
-            assert_eq!(written, RingMsgWrite2::get_msg_size(MessageSpec::MESSAGE_SIZE));
+            assert_eq!(written, RingMsgWrite::get_msg_size(MessageSpec::MESSAGE_SIZE));
 
             let second_data = 2f32.to_le_bytes().repeat(1024);
             let written = prod.write_data(&second_data).await.unwrap();
             assert_eq!(
                 written,
-                RingMsgWrite2::get_msg_size(MessageDataFirst::MESSAGE_SIZE + second_data.len())
+                RingMsgWrite::get_msg_size(MessageDataFirst::MESSAGE_SIZE + second_data.len())
             );
             send.extend_from_slice(&second_data);
 
             let written = prod.write_eos().await.unwrap();
-            assert_eq!(written, RingMsgWrite2::get_msg_size(0));
+            assert_eq!(written, RingMsgWrite::get_msg_size(0));
 
             assert!(prod.write_data(&[]).await.is_none());
 
@@ -1096,7 +1096,7 @@ mod tests {
                 let written = prod.write_data(&first_data).await.unwrap();
                 assert_eq!(
                     written,
-                    RingMsgWrite2::get_msg_size(MessageDataFirst::MESSAGE_SIZE + first_data.len())
+                    RingMsgWrite::get_msg_size(MessageDataFirst::MESSAGE_SIZE + first_data.len())
                 );
 
                 assert!(obsv_c.read_is_held());
@@ -1104,7 +1104,7 @@ mod tests {
 
                 order_c.lock().push("send_eos");
                 let written = prod.write_eos().await.unwrap();
-                assert_eq!(written, RingMsgWrite2::get_msg_size(0));
+                assert_eq!(written, RingMsgWrite::get_msg_size(0));
 
                 // "wait_seek" can only return here if the channel gets closed, which happens when the consumer reaches the EOS message (not just on drop)
                 let _ = prod.wait_seek().await;
@@ -1161,11 +1161,11 @@ mod tests {
             let written = prod.write_data(&first_data).await.unwrap();
             assert_eq!(
                 written,
-                RingMsgWrite2::get_msg_size(MessageDataFirst::MESSAGE_SIZE + first_data.len())
+                RingMsgWrite::get_msg_size(MessageDataFirst::MESSAGE_SIZE + first_data.len())
             );
 
             let written = prod.write_eos().await.unwrap();
-            assert_eq!(written, RingMsgWrite2::get_msg_size(0));
+            assert_eq!(written, RingMsgWrite::get_msg_size(0));
 
             let obsv = prod.inner.observe();
             drop(prod);
@@ -1215,7 +1215,7 @@ mod tests {
             let written = prod.write_data(&first_data).await.unwrap();
             assert_eq!(
                 written,
-                RingMsgWrite2::get_msg_size(MessageDataFirst::MESSAGE_SIZE + first_data.len())
+                RingMsgWrite::get_msg_size(MessageDataFirst::MESSAGE_SIZE + first_data.len())
             );
 
             let obsv = prod.inner.observe();
