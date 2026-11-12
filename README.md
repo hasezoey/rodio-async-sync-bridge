@@ -42,7 +42,7 @@ loop {
     // if there is nothing to write, this future may exit immediately, causing a fast-loop until seek or dropped.
     // that is why condition is here, to only listen on the "seek" future.
     written = write_fut, if !send_eos => {
-      decoder.advance_offset(written);
+      decoder.advance_offset(decoder.get_buffer().len());
     },
     seek = seek_fut => {
       send_eos = false;

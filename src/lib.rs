@@ -172,11 +172,27 @@ impl AsyncRingProducer {
             unimplemented!("This should be checked outside of the function");
         };
 
-        let buf = &data[msg.get_range()];
-        self.inner.push_exact(buf).await.ok()?;
-        msg.advance_read(buf.len());
+        let mut buf = &data[msg.get_range()];
+        // This needs to be tracked separately, as "buf" gets sliced down during the loop,
+        // and msg keeps track of progress across calls.
+        let mut total_written = 0;
 
-        Some(buf.len())
+        // Write the data in chunks so that we are cancel safe.
+        // We cannot use "push_exact" here, as it may not fully write the input, and on cancel
+        // we would not get a feedback on how much was actually written.
+        while !msg.is_done() && !self.inner.is_closed() {
+            // "1024" is arbitrarily chosen. It is used to avoid writing 1 sample at a time and then waiting again.
+            let wait_for = buf.len().min(1024);
+            self.inner.wait_vacant(wait_for).await.ok()?;
+            let chunck_size = buf.len().min(self.inner.vacant_len());
+
+            let written = self.inner.push_slice(&buf[..chunck_size]);
+            msg.advance_read(written);
+            buf = &buf[written..];
+            total_written += written;
+        }
+
+        Some(total_written)
     }
 
     /// Create a Future that waits until the data is completely written.
@@ -185,27 +201,27 @@ impl AsyncRingProducer {
     ///
     /// Returns [`None`] if the ring buffer is closed.
     ///
+    /// # Safety
+    ///
+    /// This function expects the same exact buffer across calls, until the message is completely written.
+    /// Do not change the buffer (slicing / completely different data)!
+    ///
     /// # Cancel Safety
     ///
-    /// This future is only cancel safe if the next action is to drop the producer, or process a seek (discarding all data)
+    /// This future is cancel safe, as long as the next call gets the same exact buffer until the message is complete,
+    /// as it only writes complete chunks.
     #[allow(clippy::missing_panics_doc)] // https://github.com/rust-lang/rust-clippy/issues/14534
-    pub async fn write_data(&mut self, data: &[u8]) -> Option<usize> {
-        if data.is_empty() {
+    pub async fn write_data(&mut self, buf: &[u8]) -> Option<usize> {
+        if buf.is_empty() {
             return None;
         }
 
         let mut written = 0;
         if self.data.is_none() {
-            written += self.write_data_header(data.len()).await?;
+            written += self.write_data_header(buf.len()).await?;
         }
 
-        // #[expect(
-        //     clippy::missing_panics_doc,
-        //     reason = "it is ensured to be Some via if and `new_data` above"
-        // )]
-        while !self.data.as_mut().unwrap().is_done() && !self.inner.is_closed() {
-            written += self.write_data_bytes(data).await?;
-        }
+        written += self.write_data_bytes(buf).await?;
 
         self.data.take();
 
