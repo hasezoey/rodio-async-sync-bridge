@@ -59,16 +59,16 @@ impl TryFrom<symphonia::core::audio::AudioSpec> for AudioSpec {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum RingMessages {
-    // dont use 0 to differentiate from default buffer values.
+    // don't use 0 to differentiate from default buffer values.
     Data = 1,
     Spec = 2,
     Eos  = 3,
 }
 
 impl RingMessages {
-    /// Convert from a byte to a instance of this enum.
+    /// Convert from a byte to an instance of this enum.
     ///
-    /// This will panic if a unknown byte is given, as there is only ever expected to be known bytes.
+    /// This will panic if an unknown byte is given, as there is only ever expected to be known bytes.
     pub fn from_u8(byte: u8) -> Self {
         match byte {
             1 => Self::Data,

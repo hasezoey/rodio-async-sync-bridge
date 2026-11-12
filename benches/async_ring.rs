@@ -21,7 +21,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let (mut prod, mut cons) = new_bridge(&spec, total_duration, current_frame_len, 0, runtime.handle().clone());
 
-    // spawn a infinitely producing producer
+    // spawn an infinitely producing producer
     std::thread::spawn(move || {
         runtime.block_on(async {
             loop {
