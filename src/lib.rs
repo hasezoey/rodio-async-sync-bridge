@@ -16,6 +16,7 @@ use async_ringbuf::{
         AsyncProducer,
         Consumer,
         Observer,
+        Producer,
         Split,
     },
 };
@@ -126,7 +127,10 @@ impl AsyncRingProducer {
         // )]
         let _ = RingMsgWrite2::try_write_spec(spec, current_span_len, &mut msg_buf).unwrap();
 
-        self.inner.push_exact(&msg_buf).await.ok()?;
+        // Wait for enough free space to write everything at once.
+        // With "push_exact", it could write the data partially, which is not cancel safe.
+        self.inner.wait_vacant(msg_buf.len()).await.ok()?;
+        self.inner.push_slice(&msg_buf);
 
         Some(msg_buf.len())
     }
@@ -146,7 +150,10 @@ impl AsyncRingProducer {
         // )]
         let (data, _written) = RingMsgWrite2::try_write_data_first(length, &mut msg_buf).unwrap();
 
-        self.inner.push_exact(&msg_buf).await.ok()?;
+        // Wait for enough free space to write everything at once.
+        // With "push_exact", it could write the data partially, which is not cancel safe.
+        self.inner.wait_vacant(msg_buf.len()).await.ok()?;
+        self.inner.push_slice(&msg_buf);
 
         self.data = Some(data);
 
@@ -224,7 +231,10 @@ impl AsyncRingProducer {
         // )]
         let _ = RingMsgWrite2::try_write_eos(&mut msg_buf).unwrap();
 
-        self.inner.push_exact(&msg_buf).await.ok()?;
+        // Wait for enough free space to write everything at once.
+        // With "push_exact", it could write the data partially, which is not cancel safe.
+        self.inner.wait_vacant(msg_buf.len()).await.ok()?;
+        self.inner.push_slice(&msg_buf);
 
         Some(msg_buf.len())
     }

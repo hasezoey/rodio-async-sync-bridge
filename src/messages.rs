@@ -260,7 +260,7 @@ impl MessageDataFirst {
     }
 }
 
-/// The second part of a [`RingMessage::Data`], a helper to read the actual bytes of a message.
+/// The second part of a [`RingMessages::Data`], a helper to read the actual bytes of a message.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MessageDataActual {
     /// Length in bytes
