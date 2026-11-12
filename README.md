@@ -57,8 +57,8 @@ async fn decoder_task(mut decoder: MockDecoder, mut producer: AsyncRingProducer)
         decoder.try_seek(seek.seek_to)?;
         send_eos = false;
         let spec = decoder.spec();
-        let spec = AudioSpec::new_checked(spec.rate, spec.channels).unwrap();
-        if producer.finish_seek(&spec, decoder.buffer_len(), seek.callback).await.is_none() {
+        let spec = AudioSpec::try_new(spec.rate, spec.channels).unwrap();
+        if producer.complete_seek(&spec, decoder.buffer_len(), seek.callback).await.is_none() {
           break;
         }
       }
@@ -71,7 +71,7 @@ async fn decoder_task(mut decoder: MockDecoder, mut producer: AsyncRingProducer)
 /// The Task that reads the samples from the async ring buffer bridge and provides them via a rodio source.
 ///
 /// For this showcase, it just counts the number of samples consumed and seeks once.
-async fn consumer_task(mut consumer: AsyncRingConsumer) -> Result<usize, DynError> {
+fn consumer_task(mut consumer: SyncRingConsumer) -> Result<usize, DynError> {
   let mut count = 0;
   let mut sought = false;
   while consumer.next().is_some() {
