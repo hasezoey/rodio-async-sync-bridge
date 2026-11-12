@@ -61,6 +61,6 @@ jobs:
       - name: Run syntax check
         run: cargo build --workspace --all-features
       - name: Tests
-        run: cargo test --workspace --all-features --no-fail-fast
+        run: cargo test --workspace --all-features --no-fail-fast --all-targets
         env:
           RUST_BACKTRACE: full
