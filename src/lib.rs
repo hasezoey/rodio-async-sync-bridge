@@ -117,7 +117,7 @@ impl AsyncRingProducer {
     ///
     /// This future either completely writes the message, or not at all, making it completely cancel safe.
     #[allow(clippy::missing_panics_doc)] // https://github.com/rust-lang/rust-clippy/issues/14534
-    pub async fn write_new_spec(&mut self, spec: &AudioSpec, current_span_len: usize) -> Option<usize> {
+    pub async fn write_spec(&mut self, spec: &AudioSpec, current_span_len: usize) -> Option<usize> {
         let mut msg_buf = [0; RingMsgWrite::get_msg_size(MessageSpec::MESSAGE_SIZE)];
         // SAFETY: we allocated the exact necessary size, this can never fail
         // #[expect(
@@ -275,12 +275,12 @@ impl AsyncRingProducer {
     /// # Cancel Safety
     ///
     /// This future is *not* cancel safe. It expects to be awaited to completion once called.
-    pub async fn finish_seek(&mut self, spec: &AudioSpec, current_span_len: usize, cb: SeekCallback) -> Option<usize> {
+    pub async fn complete_seek(&mut self, spec: &AudioSpec, current_span_len: usize, cb: SeekCallback) -> Option<usize> {
         self.data.take();
         let bytes_to_skip = self.inner.occupied_len();
         let _ = cb.0.send(bytes_to_skip);
 
-        self.write_new_spec(spec, current_span_len).await
+        self.write_spec(spec, current_span_len).await
     }
 }
 
@@ -952,7 +952,7 @@ mod tests {
             send.extend_from_slice(&first_data);
 
             let new_spec = AudioSpec::new_checked(48000, 2).unwrap();
-            let written = prod.write_new_spec(&new_spec, 1024).await.unwrap();
+            let written = prod.write_spec(&new_spec, 1024).await.unwrap();
             assert_eq!(written, RingMsgWrite::get_msg_size(MessageSpec::MESSAGE_SIZE));
 
             let second_data = 2f32.to_le_bytes().repeat(1024);
@@ -1000,7 +1000,7 @@ mod tests {
             });
 
             let new_spec = AudioSpec::new_checked(48000, 1).unwrap();
-            prod.write_new_spec(&new_spec, 2).await.unwrap();
+            prod.write_spec(&new_spec, 2).await.unwrap();
             prod.write_data(&1.0f32.to_ne_bytes()).await.unwrap();
             prod.write_eos().await.unwrap();
 

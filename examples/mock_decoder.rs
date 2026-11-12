@@ -141,7 +141,7 @@ async fn decoder_task(mut decoder: MockDecoder, mut producer: AsyncRingProducer)
                 send_eos = false;
                 let spec = decoder.spec();
                 let spec = AudioSpec::new_checked(spec.rate, spec.channels).unwrap();
-                if producer.finish_seek(&spec, decoder.buffer_len(), seek.callback).await.is_none() {
+                if producer.complete_seek(&spec, decoder.buffer_len(), seek.callback).await.is_none() {
                     break;
                 }
             }
