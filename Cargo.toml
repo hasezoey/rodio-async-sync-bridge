@@ -1,6 +1,6 @@
 [package]
 name = "rodio-async-sync-bridge"
-version = "0.1.3"
+version = "0.2.0"
 authors = ["hasezoey <hasezoey@gmail.com>"]
 edition = "2024"
 # should always match rodio's minimum supported Rust version;
