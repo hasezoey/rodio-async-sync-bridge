@@ -430,6 +430,7 @@ impl AsyncRingConsumer {
                     };
 
                     self.apply_spec_msg(spec_res);
+                    self.current_span_len = spec_res.current_span_len;
 
                     (RingMsgParse2::Spec, read)
                 },
@@ -904,7 +905,10 @@ mod tests {
 
         use async_ringbuf::traits::Observer;
         use parking_lot::Mutex;
-        use rodio::Sample;
+        use rodio::{
+            Sample,
+            Source,
+        };
 
         use crate::{
             AudioSpec,
@@ -977,6 +981,30 @@ mod tests {
             assert_eq!(recv_lock.len(), value_size * 1024 * 2);
 
             assert_eq!(*send, *recv_lock);
+        }
+
+        #[tokio::test]
+        async fn updates_current_span_len_on_new_spec() {
+            let (mut prod, mut cons) = new_bridge(
+                &AudioSpec::new_checked(44000, 1).unwrap(),
+                None,
+                4,
+                0,
+                tokio::runtime::Handle::current(),
+            );
+
+            let consumer_task = tokio::task::spawn_blocking(move || {
+                assert_eq!(cons.current_span_len(), Some(4));
+                assert_eq!(cons.next(), Some(1.0));
+                assert_eq!(cons.current_span_len(), Some(2));
+            });
+
+            let new_spec = AudioSpec::new_checked(48000, 1).unwrap();
+            prod.write_new_spec(&new_spec, 2).await.unwrap();
+            prod.write_data(&1.0f32.to_ne_bytes()).await.unwrap();
+            prod.write_eos().await.unwrap();
+
+            consumer_task.await.unwrap();
         }
 
         #[tokio::test]
