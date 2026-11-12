@@ -85,7 +85,7 @@ body = """
             {{ self::first_message(commit=commit) }}\
             {% if commit.remote.pr_number %} ([#{{ commit.remote.pr_number }}]({{ self::remote_url() }}/pull/{{ commit.remote.pr_number }})){% endif %}
             {% raw %}  {% endraw %}- **BREAKING CHANGE**: {{ commit.breaking_description }}
-    {% endfor -%}
+    {% endfor %}
 {% endif -%}
 {% for group, commits in commits | group_by(attribute="group") %}\
     ### {{ group | striptags | trim | upper_first }}
