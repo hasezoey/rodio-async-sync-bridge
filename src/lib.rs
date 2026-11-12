@@ -37,8 +37,8 @@ use tokio::{
 };
 
 use messages::{
-    MessageDataActual,
-    MessageDataFirst,
+    MessageDataHeader,
+    MessageDataPayload,
     MessageDataValue,
     MessageSpec,
     MessageSpecResult,
@@ -89,7 +89,7 @@ pub struct AsyncRingProducer {
     inner:   ProdWrap,
     seek_rx: Arc<RwLock<mpsc::Receiver<SeekRequest>>>,
 
-    data: Option<MessageDataActual>,
+    data: Option<MessageDataPayload>,
 }
 
 impl AsyncRingProducer {
@@ -141,13 +141,13 @@ impl AsyncRingProducer {
     /// Returns [`None`] if the ring buffer is closed.
     #[allow(clippy::missing_panics_doc)] // https://github.com/rust-lang/rust-clippy/issues/14534
     async fn write_data_header(&mut self, length: usize) -> Option<usize> {
-        let mut msg_buf = [0; RingMsgWrite::get_msg_size(MessageDataFirst::MESSAGE_SIZE)];
+        let mut msg_buf = [0; RingMsgWrite::get_msg_size(MessageDataHeader::MESSAGE_SIZE)];
         // SAFETY: we allocated the exact necessary size, this can never fail
         // #[expect(
         //     clippy::missing_panics_doc,
         //     reason = "static buffer with exact size required created above"
         // )]
-        let (data, _written) = RingMsgWrite::try_write_data_first(length, &mut msg_buf).unwrap();
+        let (data, _written) = RingMsgWrite::try_write_data_header(length, &mut msg_buf).unwrap();
 
         // Wait for enough free space to write everything at once.
         // With "push_exact", it could write the data partially, which is not cancel safe.
@@ -166,7 +166,7 @@ impl AsyncRingProducer {
     /// Returns [`Some(count)`](Some) if the message is written, [`None`] if closed.
     /// The `count` returned represents the total number of bytes written for the current message in this call,
     /// It does *not* represent the bytes consumed from the buffer.
-    async fn write_data_bytes(&mut self, data: &[u8]) -> Option<usize> {
+    async fn write_data_payload(&mut self, data: &[u8]) -> Option<usize> {
         let Some(msg) = &mut self.data else {
             unimplemented!("This should be checked outside of the function");
         };
@@ -226,7 +226,7 @@ impl AsyncRingProducer {
             written += self.write_data_header(buf.len()).await?;
         }
 
-        written += self.write_data_bytes(buf).await?;
+        written += self.write_data_payload(buf).await?;
 
         self.data.take();
 
@@ -340,7 +340,7 @@ pub struct SyncRingConsumer {
 
     // random default size, 1024*32
     buf:      StaticBuf<32768>,
-    last_msg: Option<MessageDataActual>,
+    last_msg: Option<MessageDataPayload>,
     handle:   Handle,
 
     // cached information on how to treat current data until a update
@@ -415,7 +415,7 @@ impl SyncRingConsumer {
 
             let (msg, read) = match detected_type {
                 RingMessages::Data => {
-                    let (data_res, read) = match MessageDataFirst::try_read_buf(self.buf.get_ref()) {
+                    let (data_res, read) = match MessageDataHeader::try_read_buf(self.buf.get_ref()) {
                         Ok(v) => v,
                         Err(wait_for) => {
                             wait_for_bytes = wait_for + self.buf.len();
@@ -918,7 +918,7 @@ mod tests {
         use crate::{
             AudioSpec,
             MIN_RING_SIZE,
-            MessageDataFirst,
+            MessageDataHeader,
             MessageSpec,
             RingMsgWrite,
             new_bridge,
@@ -952,7 +952,7 @@ mod tests {
             let written = prod.write_data(&first_data).await.unwrap();
             assert_eq!(
                 written,
-                RingMsgWrite::get_msg_size(MessageDataFirst::MESSAGE_SIZE + first_data.len())
+                RingMsgWrite::get_msg_size(MessageDataHeader::MESSAGE_SIZE + first_data.len())
             );
             send.extend_from_slice(&first_data);
 
@@ -964,7 +964,7 @@ mod tests {
             let written = prod.write_data(&second_data).await.unwrap();
             assert_eq!(
                 written,
-                RingMsgWrite::get_msg_size(MessageDataFirst::MESSAGE_SIZE + second_data.len())
+                RingMsgWrite::get_msg_size(MessageDataHeader::MESSAGE_SIZE + second_data.len())
             );
             send.extend_from_slice(&second_data);
 
@@ -1101,7 +1101,7 @@ mod tests {
                 let written = prod.write_data(&first_data).await.unwrap();
                 assert_eq!(
                     written,
-                    RingMsgWrite::get_msg_size(MessageDataFirst::MESSAGE_SIZE + first_data.len())
+                    RingMsgWrite::get_msg_size(MessageDataHeader::MESSAGE_SIZE + first_data.len())
                 );
 
                 assert!(obsv_c.read_is_held());
@@ -1166,7 +1166,7 @@ mod tests {
             let written = prod.write_data(&first_data).await.unwrap();
             assert_eq!(
                 written,
-                RingMsgWrite::get_msg_size(MessageDataFirst::MESSAGE_SIZE + first_data.len())
+                RingMsgWrite::get_msg_size(MessageDataHeader::MESSAGE_SIZE + first_data.len())
             );
 
             let written = prod.write_eos().await.unwrap();
@@ -1220,7 +1220,7 @@ mod tests {
             let written = prod.write_data(&first_data).await.unwrap();
             assert_eq!(
                 written,
-                RingMsgWrite::get_msg_size(MessageDataFirst::MESSAGE_SIZE + first_data.len())
+                RingMsgWrite::get_msg_size(MessageDataHeader::MESSAGE_SIZE + first_data.len())
             );
 
             let obsv = prod.inner.observe();

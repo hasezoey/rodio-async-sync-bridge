@@ -135,11 +135,11 @@ impl RingMsgWrite {
         Ok(((), written))
     }
 
-    /// Try to write a full [`RingMessages::Data`] (not the data itself) to the buffer, or return how many more bytes are necessary.
+    /// Try to write a full [`RingMessages::Data`]'s Header to the buffer, or return how many more bytes are necessary.
     ///
     /// This function will only write anything if there is enough space in the input buffer.
-    pub fn try_write_data_first(length: usize, buf: &mut [u8]) -> PResult<MessageDataActual> {
-        let size = Self::get_msg_size(MessageDataFirst::MESSAGE_SIZE);
+    pub fn try_write_data_header(length: usize, buf: &mut [u8]) -> PResult<MessageDataPayload> {
+        let size = Self::get_msg_size(MessageDataHeader::MESSAGE_SIZE);
         if buf.len() < size {
             return Err(size - buf.len());
         }
@@ -147,7 +147,7 @@ impl RingMsgWrite {
         let ((), written) = Self::write_id(RingMessages::Data, buf).unwrap();
         let buf = &mut buf[written..];
 
-        let (data, _written) = MessageDataFirst::try_write_buf(length, buf).unwrap();
+        let (data, _written) = MessageDataHeader::try_write_buf(length, buf).unwrap();
 
         Ok((data, size))
     }
@@ -157,7 +157,7 @@ impl RingMsgWrite {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RingMsgParse {
     Spec,
-    Data(MessageDataActual),
+    Data(MessageDataPayload),
     Eos,
 }
 
@@ -227,14 +227,13 @@ impl MessageSpec {
 
 /// The first part of a [`RingMessages::Data`], reading the length.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct MessageDataFirst;
+pub struct MessageDataHeader;
 
-// TODO: maybe use nom or similar?
-impl MessageDataFirst {
+impl MessageDataHeader {
     pub const MESSAGE_SIZE: usize = size_of::<usize>();
 
     /// Try to read a message from the given buffer, or return how many bytes are still necessary
-    pub fn try_read_buf(buf: &[u8]) -> PResult<MessageDataActual> {
+    pub fn try_read_buf(buf: &[u8]) -> PResult<MessageDataPayload> {
         if buf.len() < Self::MESSAGE_SIZE {
             return Err(Self::MESSAGE_SIZE - buf.len());
         }
@@ -245,31 +244,31 @@ impl MessageDataFirst {
         // read usize
         let length = usize::from_ne_bytes(length_bytes);
 
-        Ok((MessageDataActual::new(length), Self::MESSAGE_SIZE))
+        Ok((MessageDataPayload::new(length), Self::MESSAGE_SIZE))
     }
 
     /// Try to write a message to the given buffer, or return how many bytes are still necessary
-    pub fn try_write_buf(length: usize, buf: &mut [u8]) -> PResult<MessageDataActual> {
+    pub fn try_write_buf(length: usize, buf: &mut [u8]) -> PResult<MessageDataPayload> {
         if buf.len() < Self::MESSAGE_SIZE {
             return Err(Self::MESSAGE_SIZE - buf.len());
         }
 
         buf[..Self::MESSAGE_SIZE].copy_from_slice(&length.to_ne_bytes());
 
-        Ok((MessageDataActual::new_write(length), Self::MESSAGE_SIZE))
+        Ok((MessageDataPayload::new_write(length), Self::MESSAGE_SIZE))
     }
 }
 
 /// The second part of a [`RingMessages::Data`], a helper to read the actual bytes of a message.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct MessageDataActual {
+pub struct MessageDataPayload {
     /// Length in bytes
     length: usize,
     /// Read in bytes
     read:   usize,
 }
 
-impl MessageDataActual {
+impl MessageDataPayload {
     /// Length in bytes
     pub fn new(length: usize) -> Self {
         // assert everything in "length" can be a full "ValueType"
@@ -499,81 +498,81 @@ mod tests {
         use crate::{
             messages::SAMPLE_TYPE_SIZE,
             {
-                MessageDataActual,
-                MessageDataFirst,
+                MessageDataHeader,
+                MessageDataPayload,
             },
         };
 
         #[test]
         fn should_read_complete_once() {
             let input: Vec<u8> = SAMPLE_TYPE_SIZE.to_ne_bytes().into_iter().collect();
-            assert_eq!(input.len(), MessageDataFirst::MESSAGE_SIZE);
+            assert_eq!(input.len(), MessageDataHeader::MESSAGE_SIZE);
 
-            let (res, read) = MessageDataFirst::try_read_buf(&input).unwrap();
+            let (res, read) = MessageDataHeader::try_read_buf(&input).unwrap();
 
-            assert_eq!(read, MessageDataFirst::MESSAGE_SIZE);
-            assert_eq!(res, MessageDataActual::new(4));
+            assert_eq!(read, MessageDataHeader::MESSAGE_SIZE);
+            assert_eq!(res, MessageDataPayload::new(4));
         }
 
         #[test]
         fn should_report_additional() {
             let input: Vec<u8> = SAMPLE_TYPE_SIZE.to_ne_bytes().into_iter().collect();
-            assert_eq!(input.len(), MessageDataFirst::MESSAGE_SIZE);
+            assert_eq!(input.len(), MessageDataHeader::MESSAGE_SIZE);
 
-            let additional = MessageDataFirst::try_read_buf(&input[0..=1]).unwrap_err();
-            assert_eq!(additional, MessageDataFirst::MESSAGE_SIZE - 2);
+            let additional = MessageDataHeader::try_read_buf(&input[0..=1]).unwrap_err();
+            assert_eq!(additional, MessageDataHeader::MESSAGE_SIZE - 2);
 
             // check the 0 length buffer given path
-            let additional = MessageDataFirst::try_read_buf(&[]).unwrap_err();
-            assert_eq!(additional, MessageDataFirst::MESSAGE_SIZE);
+            let additional = MessageDataHeader::try_read_buf(&[]).unwrap_err();
+            assert_eq!(additional, MessageDataHeader::MESSAGE_SIZE);
 
             // finish with the last bytes
-            let (res, read) = MessageDataFirst::try_read_buf(&input).unwrap();
+            let (res, read) = MessageDataHeader::try_read_buf(&input).unwrap();
 
-            assert_eq!(read, MessageDataFirst::MESSAGE_SIZE);
-            assert_eq!(res, MessageDataActual::new(SAMPLE_TYPE_SIZE));
+            assert_eq!(read, MessageDataHeader::MESSAGE_SIZE);
+            assert_eq!(res, MessageDataPayload::new(SAMPLE_TYPE_SIZE));
         }
     }
 
     mod write_message_data_first {
         use crate::{
-            MessageDataActual,
-            MessageDataFirst,
+            MessageDataHeader,
+            MessageDataPayload,
         };
 
         #[test]
         fn should_write_complete_once() {
-            let out_buf = &mut [0; MessageDataFirst::MESSAGE_SIZE];
-            assert_eq!(out_buf.len(), MessageDataFirst::MESSAGE_SIZE);
+            let out_buf = &mut [0; MessageDataHeader::MESSAGE_SIZE];
+            assert_eq!(out_buf.len(), MessageDataHeader::MESSAGE_SIZE);
 
-            let msg_spec = MessageDataFirst::try_write_buf(4, out_buf);
+            let msg_spec = MessageDataHeader::try_write_buf(4, out_buf);
 
             assert_eq!(
                 msg_spec,
-                Ok((MessageDataActual::new(4), MessageDataFirst::MESSAGE_SIZE))
+                Ok((MessageDataPayload::new(4), MessageDataHeader::MESSAGE_SIZE))
             );
         }
 
         #[test]
         fn should_write_across_calls() {
-            let out_buf = &mut [0; MessageDataFirst::MESSAGE_SIZE];
-            assert_eq!(out_buf.len(), MessageDataFirst::MESSAGE_SIZE);
+            let out_buf = &mut [0; MessageDataHeader::MESSAGE_SIZE];
+            assert_eq!(out_buf.len(), MessageDataHeader::MESSAGE_SIZE);
 
-            let msg_spec = MessageDataFirst::try_write_buf(4, &mut out_buf[..=1]);
+            let msg_spec = MessageDataHeader::try_write_buf(4, &mut out_buf[..=1]);
 
-            assert_eq!(msg_spec, Err(MessageDataFirst::MESSAGE_SIZE - 2));
+            assert_eq!(msg_spec, Err(MessageDataHeader::MESSAGE_SIZE - 2));
 
             // check the 0 length buffer given path
-            let msg_spec = MessageDataFirst::try_write_buf(4, &mut []);
+            let msg_spec = MessageDataHeader::try_write_buf(4, &mut []);
 
-            assert_eq!(msg_spec, Err(MessageDataFirst::MESSAGE_SIZE));
+            assert_eq!(msg_spec, Err(MessageDataHeader::MESSAGE_SIZE));
 
             // finish with the last bytes
-            let msg_spec = MessageDataFirst::try_write_buf(4, out_buf);
+            let msg_spec = MessageDataHeader::try_write_buf(4, out_buf);
 
             assert_eq!(
                 msg_spec,
-                Ok((MessageDataActual::new(4), MessageDataFirst::MESSAGE_SIZE))
+                Ok((MessageDataPayload::new(4), MessageDataHeader::MESSAGE_SIZE))
             );
         }
     }
@@ -582,7 +581,7 @@ mod tests {
         use crate::{
             messages::SAMPLE_TYPE_SIZE,
             {
-                MessageDataActual,
+                MessageDataPayload,
                 MessageDataValue,
             },
         };
@@ -591,7 +590,7 @@ mod tests {
         fn should_read_complete_once() {
             let input: Vec<u8> = vec![1; SAMPLE_TYPE_SIZE];
 
-            let mut msg = MessageDataActual::new(SAMPLE_TYPE_SIZE);
+            let mut msg = MessageDataPayload::new(SAMPLE_TYPE_SIZE);
             let (res, read) = msg.try_read_buf(&input).unwrap();
             assert_eq!(res, f32::from_ne_bytes([1; SAMPLE_TYPE_SIZE]));
             assert_eq!(read, MessageDataValue::MESSAGE_SIZE);
@@ -602,14 +601,14 @@ mod tests {
         #[test]
         fn should_report_additional() {
             // check the 0 length buffer given path
-            let mut msg = MessageDataActual::new(SAMPLE_TYPE_SIZE * 2);
+            let mut msg = MessageDataPayload::new(SAMPLE_TYPE_SIZE * 2);
             let additional = msg.try_read_buf(&[]).unwrap_err();
             assert_eq!(additional, MessageDataValue::MESSAGE_SIZE);
             assert_eq!(msg.read, 0);
             assert!(!msg.is_done());
 
             // some actual partial data
-            let mut msg = MessageDataActual::new(SAMPLE_TYPE_SIZE * 2);
+            let mut msg = MessageDataPayload::new(SAMPLE_TYPE_SIZE * 2);
             let additional = msg.try_read_buf(&[1; 1]).unwrap_err();
             assert_eq!(additional, MessageDataValue::MESSAGE_SIZE - 1);
             assert_eq!(msg.read, 0);
@@ -620,7 +619,7 @@ mod tests {
         fn should_resume_additional() {
             let input: Vec<u8> = vec![1; SAMPLE_TYPE_SIZE * 2];
 
-            let mut msg = MessageDataActual::new(SAMPLE_TYPE_SIZE * 2);
+            let mut msg = MessageDataPayload::new(SAMPLE_TYPE_SIZE * 2);
             let (res, read) = msg.try_read_buf(&input).unwrap();
             assert_eq!(res, f32::from_ne_bytes([1; SAMPLE_TYPE_SIZE]));
             assert_eq!(read, MessageDataValue::MESSAGE_SIZE);
@@ -640,7 +639,7 @@ mod tests {
         use crate::{
             messages::SAMPLE_TYPE_SIZE,
             {
-                MessageDataActual,
+                MessageDataPayload,
                 MessageDataValue,
             },
         };
@@ -649,7 +648,7 @@ mod tests {
         fn should_write_complete_once() {
             let out_buf = &mut [0; SAMPLE_TYPE_SIZE];
 
-            let mut msg_data = MessageDataActual::new_write(SAMPLE_TYPE_SIZE);
+            let mut msg_data = MessageDataPayload::new_write(SAMPLE_TYPE_SIZE);
 
             assert!(!msg_data.is_done());
 
@@ -664,7 +663,7 @@ mod tests {
         fn should_write_across_calls() {
             let out_buf = &mut [0; SAMPLE_TYPE_SIZE];
 
-            let mut msg_data = MessageDataActual::new_write(SAMPLE_TYPE_SIZE);
+            let mut msg_data = MessageDataPayload::new_write(SAMPLE_TYPE_SIZE);
 
             let res = msg_data.try_write_buf(1f32, &mut out_buf[0..1]);
 
@@ -765,8 +764,8 @@ mod tests {
     mod write_ring_messages {
         use crate::{
             AudioSpec,
-            MessageDataActual,
-            MessageDataFirst,
+            MessageDataHeader,
+            MessageDataPayload,
             MessageDataValue,
             MessageSpec,
             RingMessages,
@@ -794,19 +793,19 @@ mod tests {
 
         #[test]
         fn should_write_complete_once_data() {
-            let out_buf = &mut [0; RingMsgWrite::get_msg_size(MessageDataFirst::MESSAGE_SIZE + SAMPLE_TYPE_SIZE)];
+            let out_buf = &mut [0; RingMsgWrite::get_msg_size(MessageDataHeader::MESSAGE_SIZE + SAMPLE_TYPE_SIZE)];
             assert_eq!(
                 out_buf.len(),
-                MessageDataFirst::MESSAGE_SIZE + SAMPLE_TYPE_SIZE + RingMsgWrite::ID_SIZE
+                MessageDataHeader::MESSAGE_SIZE + SAMPLE_TYPE_SIZE + RingMsgWrite::ID_SIZE
             );
 
-            let res = RingMsgWrite::try_write_data_first(SAMPLE_TYPE_SIZE, out_buf);
+            let res = RingMsgWrite::try_write_data_header(SAMPLE_TYPE_SIZE, out_buf);
 
             assert_eq!(
                 res,
                 Ok((
-                    MessageDataActual::new_write(4),
-                    RingMsgWrite::ID_SIZE + MessageDataFirst::MESSAGE_SIZE
+                    MessageDataPayload::new_write(4),
+                    RingMsgWrite::ID_SIZE + MessageDataHeader::MESSAGE_SIZE
                 ))
             );
             let expected: Vec<u8> = [RingMessages::Data.as_u8()]
