@@ -110,9 +110,8 @@ impl AsyncRingProducer {
 
     /// Write a new spec to the ring buffer.
     ///
-    /// Returns [`Ok(count)`](Ok) if the message is written, with the length, [`Err`] if closed.
-    ///
-    /// Returns [`None`] if the ring buffer is closed.
+    /// Returns [`Some(count)`](Some) if the message is written, with the length, [`None`] if closed.
+    /// The `count` returned represents the total number of bytes written for the current message in this call.
     ///
     /// # Cancel Safety
     ///
@@ -137,7 +136,7 @@ impl AsyncRingProducer {
 
     /// Write the header of the data message, without writing any data bytes yet.
     ///
-    /// Returns [`Ok(count)`](Ok) if the message is written, with the length, [`Err`] if closed.
+    /// Returns [`Some(count)`](Some) if the message is written, with the length, [`None`] if closed.
     ///
     /// Returns [`None`] if the ring buffer is closed.
     #[allow(clippy::missing_panics_doc)] // https://github.com/rust-lang/rust-clippy/issues/14534
@@ -164,9 +163,9 @@ impl AsyncRingProducer {
     ///
     /// This functions expects a data message to be active.
     ///
-    /// Returns [`Ok(count)`](Ok) if the message is written, with the length, [`Err`] if closed.
-    ///
-    /// Returns [`None`] if the ring buffer is closed.
+    /// Returns [`Some(count)`](Some) if the message is written, [`None`] if closed.
+    /// The `count` returned represents the total number of bytes written for the current message in this call,
+    /// It does *not* represent the bytes consumed from the buffer.
     async fn write_data_bytes(&mut self, data: &[u8]) -> Option<usize> {
         let Some(msg) = &mut self.data else {
             unimplemented!("This should be checked outside of the function");
@@ -192,14 +191,20 @@ impl AsyncRingProducer {
             total_written += written;
         }
 
+        if !msg.is_done() && self.inner.is_closed() {
+            return None;
+        }
+
         Some(total_written)
     }
 
     /// Create a Future that waits until the data is completely written.
     ///
-    /// Returns [`Ok(count)`](Ok) if the message is written, with the length, [`Err`] if closed.
+    /// Returns [`Some(count)`](Some) if the message is written, [`None`] if closed.
+    /// The `count` returned represents the total number of bytes written for the current message in this call,
+    /// It does *not* represent the bytes consumed from the buffer.
     ///
-    /// Returns [`None`] if the ring buffer is closed.
+    /// If this function returned `Some`, it means the full buffer was consumed.
     ///
     /// # Safety
     ///
@@ -230,9 +235,8 @@ impl AsyncRingProducer {
 
     /// Write a End-of-Stream (EOS) message.
     ///
-    /// Returns [`Ok(count)`](Ok) if the message is written, with the length, [`Err`] if closed.
-    ///
-    /// Returns [`None`] if the ring buffer is closed.
+    /// Returns [`Some(count)`](Some) if the message is written, [`None`] if closed.
+    /// The `count` returned represents the total number of bytes written for the current message in this call.
     ///
     /// # Cancel Safety
     ///
