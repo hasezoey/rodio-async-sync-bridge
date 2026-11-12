@@ -268,11 +268,19 @@ impl AsyncRingProducer {
     ///
     /// This clear all data state, calls the consumer to resume with how many bytes to skip
     /// and sends the new spec (in case it changed in the seek).
-    pub async fn finish_seek(&mut self, spec: &AudioSpec, current_span_len: usize, cb: SeekCallback) {
+    ///
+    /// Returns [`Some(count)`](Some) if the message is written, [`None`] if closed.
+    /// The `count` returned represents the total number of bytes written for the current message in this call.
+    ///
+    /// # Cancel Safety
+    ///
+    /// This future is *not* cancel safe. It expects to be awaited to completion once called.
+    pub async fn finish_seek(&mut self, spec: &AudioSpec, current_span_len: usize, cb: SeekCallback) -> Option<usize> {
         self.data.take();
         let bytes_to_skip = self.inner.occupied_len();
         let _ = cb.0.send(bytes_to_skip);
-        let _ = self.write_new_spec(spec, current_span_len).await;
+
+        self.write_new_spec(spec, current_span_len).await
     }
 }
 
