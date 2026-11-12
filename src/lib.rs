@@ -62,17 +62,17 @@ pub struct SeekCallback(oneshot::Sender<usize>);
 
 /// Data to send over the Seek Channel.
 #[derive(Debug)]
-pub struct SeekData {
+pub struct SeekRequest {
     /// The point to seek to in the decoder.
     pub seek_to:  Duration,
     /// The callback for when the seek has been processed and is complete on the decoder.
     pub callback: SeekCallback,
 }
 
-impl SeekData {
+impl SeekRequest {
     /// Create a new `SeekData` instance.
     pub fn new(seek_to: Duration, callback: SeekCallback) -> Self {
-        SeekData { seek_to, callback }
+        SeekRequest { seek_to, callback }
     }
 }
 
@@ -87,13 +87,13 @@ pub const MIN_RING_SIZE: usize = 192_000 * MessageDataValue::MESSAGE_SIZE;
 #[derive(Debug)]
 pub struct AsyncRingProducer {
     inner:   ProdWrap,
-    seek_rx: Arc<RwLock<mpsc::Receiver<SeekData>>>,
+    seek_rx: Arc<RwLock<mpsc::Receiver<SeekRequest>>>,
 
     data: Option<MessageDataActual>,
 }
 
 impl AsyncRingProducer {
-    fn new(wrap: ProdWrap, seek_rx: mpsc::Receiver<SeekData>) -> Self {
+    fn new(wrap: ProdWrap, seek_rx: mpsc::Receiver<SeekRequest>) -> Self {
         AsyncRingProducer {
             inner:   wrap,
             seek_rx: Arc::new(RwLock::new(seek_rx)),
@@ -101,7 +101,7 @@ impl AsyncRingProducer {
         }
     }
 
-    /// Check if the consumer ([`AsyncRingConsumer`]) is still connected and writes are possible
+    /// Check if the consumer ([`SyncRingConsumer`]) is still connected and writes are possible
     #[allow(dead_code)] // can't use expect as this function is used in tests
     #[must_use]
     pub fn is_closed(&self) -> bool {
@@ -291,10 +291,10 @@ impl AsyncRingProducer {
 
 /// Struct to wait on a channel, without the compiler complaining that `self` can't be borrowed mutably multiple times.
 #[derive(Debug)]
-pub struct WaitSeek(Arc<RwLock<mpsc::Receiver<SeekData>>>);
+pub struct WaitSeek(Arc<RwLock<mpsc::Receiver<SeekRequest>>>);
 
 impl Future for WaitSeek {
-    type Output = Option<SeekData>;
+    type Output = Option<SeekRequest>;
 
     fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
         self.0.write().poll_recv(cx)
@@ -311,13 +311,13 @@ pub fn new_bridge(
     current_span_len: usize,
     size: usize,
     handle: Handle,
-) -> (AsyncRingProducer, AsyncRingConsumer) {
+) -> (AsyncRingProducer, SyncRingConsumer) {
     let size = size.max(MIN_RING_SIZE);
     let ringbuf = AsyncHeapRb::<u8>::new(size);
     let (prod, cons) = ringbuf.split();
     let (tx, rx) = mpsc::channel(1);
     let async_prod = AsyncRingProducer::new(ProdWrap::new(prod), rx);
-    let async_cons = AsyncRingConsumer::new(
+    let async_cons = SyncRingConsumer::new(
         ConsWrap::new(cons),
         Some(tx),
         spec,
@@ -332,11 +332,11 @@ pub fn new_bridge(
 ///
 /// The implementation of the Consumer is meant for sync code, only blocking when having to wait for more data.
 #[derive(Debug)]
-pub struct AsyncRingConsumer {
+pub struct SyncRingConsumer {
     inner:   ConsWrap,
     /// Send a seek-to value to the producer.
     /// Also used to indicate to the producer that it should keep active.
-    seek_tx: Option<mpsc::Sender<SeekData>>,
+    seek_tx: Option<mpsc::Sender<SeekRequest>>,
 
     // random default size, 1024*32
     buf:      StaticBuf<32768>,
@@ -350,11 +350,11 @@ pub struct AsyncRingConsumer {
     total_duration:   Option<Duration>,
 }
 
-impl AsyncRingConsumer {
+impl SyncRingConsumer {
     /// Create a new consumer for the ringbuffer.
     fn new(
         inner: ConsWrap,
-        seek_tx: Option<mpsc::Sender<SeekData>>,
+        seek_tx: Option<mpsc::Sender<SeekRequest>>,
         spec: &AudioSpec,
         total_duration: Option<Duration>,
         current_span_len: usize,
@@ -533,7 +533,7 @@ impl AsyncRingConsumer {
     }
 }
 
-impl Source for AsyncRingConsumer {
+impl Source for SyncRingConsumer {
     #[inline]
     fn current_span_len(&self) -> Option<usize> {
         // this workaround might not be great, but on "None" rodio *never* retries reading this value
@@ -576,7 +576,7 @@ impl Source for AsyncRingConsumer {
             .seek_tx
             .as_mut()
             .unwrap()
-            .blocking_send(SeekData::new(pos, SeekCallback(cb_tx)));
+            .blocking_send(SeekRequest::new(pos, SeekCallback(cb_tx)));
 
         // Wait for the Producer to have processed the seek and get the final value of elements to skip
         let to_skip = cb_rx.blocking_recv().map_err(|_| {
@@ -593,7 +593,7 @@ impl Source for AsyncRingConsumer {
     }
 }
 
-impl Iterator for AsyncRingConsumer {
+impl Iterator for SyncRingConsumer {
     type Item = Sample;
 
     #[inline]
@@ -639,7 +639,7 @@ impl Iterator for AsyncRingConsumer {
 }
 
 // Contract: once reaching a EOS or the ringbuffer being closed & having read all data, it will continue outputting None
-impl FusedIterator for AsyncRingConsumer {}
+impl FusedIterator for SyncRingConsumer {}
 
 /// Static Buffer allocated on the stack, which can have a moving area of actual data within
 #[derive(Debug, Clone, Copy)]

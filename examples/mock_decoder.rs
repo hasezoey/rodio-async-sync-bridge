@@ -16,10 +16,10 @@ use rodio::{
     },
 };
 use rodio_async_sync_bridge::{
-    AsyncRingConsumer,
     AsyncRingProducer,
     AudioSpec,
     MIN_RING_SIZE,
+    SyncRingConsumer,
     new_bridge,
 };
 
@@ -154,7 +154,7 @@ async fn decoder_task(mut decoder: MockDecoder, mut producer: AsyncRingProducer)
 /// The Task that reads the samples from the async ring buffer bridge and provides them via a rodio source.
 ///
 /// For this showcase, it just counts the number of samples consumed and seeks once.
-fn consumer_task(mut consumer: AsyncRingConsumer) -> Result<usize, DynError> {
+fn consumer_task(mut consumer: SyncRingConsumer) -> Result<usize, DynError> {
     let mut count = 0;
     let mut sought = false;
     while consumer.next().is_some() {
