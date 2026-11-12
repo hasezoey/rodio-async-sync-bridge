@@ -10,7 +10,7 @@ use rodio_async_sync_bridge::{
 async fn main() {
     let samples = [0.0_f32, 0.25, -0.25, 0.0];
     let data: Vec<u8> = samples.iter().flat_map(|sample| sample.to_ne_bytes()).collect();
-    let spec = AudioSpec::new_checked(48_000, 1).unwrap();
+    let spec = AudioSpec::try_new(48_000, 1).unwrap();
 
     let (mut producer, consumer) = new_bridge(
         &spec,

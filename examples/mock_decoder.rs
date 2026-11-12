@@ -140,7 +140,7 @@ async fn decoder_task(mut decoder: MockDecoder, mut producer: AsyncRingProducer)
                 decoder.try_seek(seek.seek_to)?;
                 send_eos = false;
                 let spec = decoder.spec();
-                let spec = AudioSpec::new_checked(spec.rate, spec.channels).unwrap();
+                let spec = AudioSpec::try_new(spec.rate, spec.channels).unwrap();
                 if producer.complete_seek(&spec, decoder.buffer_len(), seek.callback).await.is_none() {
                     break;
                 }
@@ -172,7 +172,7 @@ async fn main() -> Result<(), DynError> {
     let decoder = MockDecoder::new();
     let spec = decoder.spec();
     let (producer, consumer) = new_bridge(
-        &AudioSpec::new_checked(spec.rate, spec.channels).unwrap(),
+        &AudioSpec::try_new(spec.rate, spec.channels).unwrap(),
         decoder.duration(),
         decoder.buffer_len(),
         MIN_RING_SIZE,

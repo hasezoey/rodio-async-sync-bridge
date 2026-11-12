@@ -15,7 +15,7 @@ use tokio::runtime::Builder;
 fn criterion_benchmark(c: &mut Criterion) {
     let runtime = Builder::new_current_thread().build().unwrap();
 
-    let spec = AudioSpec::new_checked(48_000, 2).unwrap();
+    let spec = AudioSpec::try_new(48_000, 2).unwrap();
     let total_duration = Some(Duration::from_secs(0));
     let current_frame_len = 0;
 

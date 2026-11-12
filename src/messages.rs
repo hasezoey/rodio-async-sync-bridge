@@ -24,7 +24,7 @@ impl AudioSpec {
     /// Create a new `AudioSpec` with the given sample rate and number of channels.
     ///
     /// Use this function for simpler NonZero handling.
-    pub fn new_checked(rate: u32, channels: u16) -> Option<Self> {
+    pub fn try_new(rate: u32, channels: u16) -> Option<Self> {
         let rate = NonZeroU32::new(rate)?;
         let channels = NonZeroU16::new(channels)?;
 
@@ -403,7 +403,7 @@ mod tests {
             assert_eq!(
                 res,
                 MessageSpecResult {
-                    spec:             AudioSpec::new_checked(44000, 2).unwrap(),
+                    spec:             AudioSpec::try_new(44000, 2).unwrap(),
                     current_span_len: 10,
                 }
             );
@@ -433,7 +433,7 @@ mod tests {
             assert_eq!(
                 res,
                 MessageSpecResult {
-                    spec:             AudioSpec::new_checked(44000, 2).unwrap(),
+                    spec:             AudioSpec::try_new(44000, 2).unwrap(),
                     current_span_len: 10,
                 }
             );
@@ -451,7 +451,7 @@ mod tests {
             let out_buf = &mut [0; MessageSpec::MESSAGE_SIZE];
             assert_eq!(out_buf.len(), MessageSpec::MESSAGE_SIZE);
 
-            let msg_spec = MessageSpec::try_write_buf(&AudioSpec::new_checked(44000, 2).unwrap(), 10, out_buf);
+            let msg_spec = MessageSpec::try_write_buf(&AudioSpec::try_new(44000, 2).unwrap(), 10, out_buf);
 
             assert_eq!(msg_spec, Ok(((), MessageSpec::MESSAGE_SIZE)));
 
@@ -470,18 +470,17 @@ mod tests {
             let out_buf = &mut [0; MessageSpec::MESSAGE_SIZE];
             assert_eq!(out_buf.len(), MessageSpec::MESSAGE_SIZE);
 
-            let msg_spec =
-                MessageSpec::try_write_buf(&AudioSpec::new_checked(44000, 2).unwrap(), 10, &mut out_buf[..=3]);
+            let msg_spec = MessageSpec::try_write_buf(&AudioSpec::try_new(44000, 2).unwrap(), 10, &mut out_buf[..=3]);
 
             assert_eq!(msg_spec, Err(MessageSpec::MESSAGE_SIZE - 4));
 
             // check the 0 length buffer given path
-            let msg_spec = MessageSpec::try_write_buf(&AudioSpec::new_checked(44000, 2).unwrap(), 10, &mut []);
+            let msg_spec = MessageSpec::try_write_buf(&AudioSpec::try_new(44000, 2).unwrap(), 10, &mut []);
 
             assert_eq!(msg_spec, Err(MessageSpec::MESSAGE_SIZE));
 
             // finish with the last bytes
-            let msg_spec = MessageSpec::try_write_buf(&AudioSpec::new_checked(44000, 2).unwrap(), 10, out_buf);
+            let msg_spec = MessageSpec::try_write_buf(&AudioSpec::try_new(44000, 2).unwrap(), 10, out_buf);
 
             assert_eq!(msg_spec, Ok(((), MessageSpec::MESSAGE_SIZE)));
 
@@ -780,7 +779,7 @@ mod tests {
             let out_buf = &mut [0; RingMsgWrite::get_msg_size(MessageSpec::MESSAGE_SIZE)];
             assert_eq!(out_buf.len(), MessageSpec::MESSAGE_SIZE + RingMsgWrite::ID_SIZE);
 
-            let res = RingMsgWrite::try_write_spec(&AudioSpec::new_checked(44000, 2).unwrap(), 10, out_buf);
+            let res = RingMsgWrite::try_write_spec(&AudioSpec::try_new(44000, 2).unwrap(), 10, out_buf);
 
             assert_eq!(res, Ok(((), RingMsgWrite::ID_SIZE + MessageSpec::MESSAGE_SIZE)));
 

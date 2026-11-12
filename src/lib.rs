@@ -930,7 +930,7 @@ mod tests {
             let recv = Arc::new(Mutex::new(Vec::new()));
 
             let (mut prod, mut cons) = new_bridge(
-                &AudioSpec::new_checked(44000, 2).unwrap(),
+                &AudioSpec::try_new(44000, 2).unwrap(),
                 None,
                 1024,
                 0,
@@ -956,7 +956,7 @@ mod tests {
             );
             send.extend_from_slice(&first_data);
 
-            let new_spec = AudioSpec::new_checked(48000, 2).unwrap();
+            let new_spec = AudioSpec::try_new(48000, 2).unwrap();
             let written = prod.write_spec(&new_spec, 1024).await.unwrap();
             assert_eq!(written, RingMsgWrite::get_msg_size(MessageSpec::MESSAGE_SIZE));
 
@@ -991,7 +991,7 @@ mod tests {
         #[tokio::test]
         async fn updates_current_span_len_on_new_spec() {
             let (mut prod, mut cons) = new_bridge(
-                &AudioSpec::new_checked(44000, 1).unwrap(),
+                &AudioSpec::try_new(44000, 1).unwrap(),
                 None,
                 4,
                 0,
@@ -1004,7 +1004,7 @@ mod tests {
                 assert_eq!(cons.current_span_len(), Some(2));
             });
 
-            let new_spec = AudioSpec::new_checked(48000, 1).unwrap();
+            let new_spec = AudioSpec::try_new(48000, 1).unwrap();
             prod.write_spec(&new_spec, 2).await.unwrap();
             prod.write_data(&1.0f32.to_ne_bytes()).await.unwrap();
             prod.write_eos().await.unwrap();
@@ -1015,7 +1015,7 @@ mod tests {
         #[tokio::test]
         async fn resumes_cancelled_data_write() {
             let (mut prod, cons) = new_bridge(
-                &AudioSpec::new_checked(44000, 2).unwrap(),
+                &AudioSpec::try_new(44000, 2).unwrap(),
                 None,
                 1024,
                 0,
@@ -1071,7 +1071,7 @@ mod tests {
             let order = Arc::new(Mutex::new(Vec::new()));
 
             let (mut prod, mut cons) = new_bridge(
-                &AudioSpec::new_checked(44000, 2).unwrap(),
+                &AudioSpec::try_new(44000, 2).unwrap(),
                 None,
                 1024,
                 0,
@@ -1145,7 +1145,7 @@ mod tests {
             let recv = Arc::new(Mutex::new(Vec::new()));
 
             let (mut prod, mut cons) = new_bridge(
-                &AudioSpec::new_checked(44000, 2).unwrap(),
+                &AudioSpec::try_new(44000, 2).unwrap(),
                 None,
                 1024,
                 0,
@@ -1199,7 +1199,7 @@ mod tests {
             let recv = Arc::new(Mutex::new(Vec::new()));
 
             let (mut prod, mut cons) = new_bridge(
-                &AudioSpec::new_checked(44000, 2).unwrap(),
+                &AudioSpec::try_new(44000, 2).unwrap(),
                 None,
                 1024,
                 0,
