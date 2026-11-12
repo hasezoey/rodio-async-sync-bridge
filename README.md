@@ -18,53 +18,70 @@ Currently, this implementation makes use of `tokio`, but this might be changed i
 
 The consumer side can be simply plugged in where a source can be put. The producer needs async functions and needs to be called directly:
 
+Runnable examples:
+
+- [Minimal bridge usage](examples/minimal.rs): `cargo run --example minimal`
+- [Mock decoding and seeking](examples/mock_decoder.rs): `cargo run --example mock_decoder`
+
+The following are the essential parts from the [Mock decoder](examples/mock_decoder.rs) example:
+
 ```rust
-let spec = decoder.spec();
-
-// Note that the following values are just placeholders, and should be adjusted to your needs
-let (prod, cons) = new_bridge(
-  AudioSpec::new_checked(spec.rate, spec.channels).unwrap(),
-  decoder.duration(),
-  decoder.buffer_len(),
-  MIN_RING_SIZE,
-  tokio::runtime::Handle::current()
-);
-
-// Append the sync consumer to the rodio sink
-sink.append(cons);
-
-let mut send_eos = false;
-loop {
-  let seek_fut = prod.wait_seek();
-  let write_fut = prod.write_data(decoder.get_buffer());
-
-  select! {
-    // if there is nothing to write, this future may exit immediately, causing a fast-loop until seek or dropped.
-    // that is why condition is here, to only listen on the "seek" future.
-    written = write_fut, if !send_eos => {
-      decoder.advance_offset(decoder.get_buffer().len());
-    },
-    seek = seek_fut => {
-      send_eos = false;
-      // "seek" being "None" here means that the seek channel is closed, which in turn means we can abort decoding.
-      let seek = seek?;
-      
-      decoder.try_seek(seek.seek_to).unwrap();
-
-      let spec = decoder.spec();
-      prod.finish_seek(&AudioSpec::new_checked(spec.rate, spec.channels).unwrap(), decoder.buffer_len(), seek.cb).await;
+/// The Task that reads the samples from the decoder and writes them to the async ring buffer bridge.
+async fn decoder_task(mut decoder: MockDecoder, mut producer: AsyncRingProducer) -> Result<(), DynError> {
+  let mut send_eos = false;
+  
+  loop {
+    if decoder.get_buffer().is_empty() && !send_eos && decoder.decode().is_none() {
+      if producer.write_eos().await.is_none() {
+        break;
+      }
+      send_eos = true;
+    }
+    
+    let seek_future = producer.wait_seek();
+    let write_future = producer.write_data(decoder.get_buffer());
+    
+    tokio::select! {
+      // If there is nothing to write, this future may exit immediately, causing a fast-loop until seek or dropped.
+      // that is why the "!send_eos" condition is here: to only listen on the "seek" future.
+      written = write_future, if !send_eos => {
+        if written.is_none() {
+          break;
+        }
+        decoder.advance_offset(decoder.get_buffer().len());
+      }
+      seek = seek_future => {
+        let Some(seek) = seek else {
+          break;
+        };
+        decoder.try_seek(seek.seek_to)?;
+        send_eos = false;
+        let spec = decoder.spec();
+        let spec = AudioSpec::new_checked(spec.rate, spec.channels).unwrap();
+        if producer.finish_seek(&spec, decoder.buffer_len(), seek.callback).await.is_none() {
+          break;
+        }
+      }
     }
   }
+  
+  Ok(())
+}
 
-  let old_spec = decoder.spec();
-  if decoder.decode().is_none() {
-    prod.write_eos().await?;
-    send_eos = true;
+/// The Task that reads the samples from the async ring buffer bridge and provides them via a rodio source.
+///
+/// For this showcase, it just counts the number of samples consumed and seeks once.
+async fn consumer_task(mut consumer: AsyncRingConsumer) -> Result<usize, DynError> {
+  let mut count = 0;
+  let mut sought = false;
+  while consumer.next().is_some() {
+    count += 1;
+    if count == 1024 && !sought {
+      consumer.try_seek(Duration::ZERO)?;
+      sought = true;
+    }
   }
-  let new_spec = decoder.spec();
-  if old_spec != new_spec {
-    prod.write_new_spec(&AudioSpec::new_checked(new_spec.rate, new_spec.channels).unwrap(), decoder.buffer_len());
-  }
+  Ok(count)
 }
 ```
 
