@@ -11,7 +11,7 @@ description = "A bridge for rodio from async to sync"
 repository = "https://github.com/hasezoey/rodio-async-sync-bridge"
 
 [features]
-default = ["symphonia"]
+default = []
 # Enable "From" conversion from Symphonia's `AudioSpec` to this crate's `AudioSpec`.
 symphonia = ["dep:symphonia"]
 
